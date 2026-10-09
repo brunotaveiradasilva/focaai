@@ -64,7 +64,7 @@ export default function RootLayout() {
   // animation frames pause, the overlay still goes away instead of hanging over the app.
   useEffect(() => {
     if (!hide) return;
-    opacity.value = withTiming(0, { duration: FADE_MS });
+    opacity.set(withTiming(0, { duration: FADE_MS }));
     const id = setTimeout(() => setGone(true), FADE_MS + 50);
     return () => clearTimeout(id);
   }, [hide, opacity]);

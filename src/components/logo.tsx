@@ -19,7 +19,7 @@ export function LogoBadge({ size = 88, animated = false }: { size?: number; anim
 
   useEffect(() => {
     if (!animated || reduce) return;
-    t.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }), -1, true);
+    t.set(withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }), -1, true));
   }, [animated, reduce, t]);
 
   const badge = useAnimatedStyle(() => ({
@@ -73,7 +73,7 @@ function Dot({ delay }: { delay: number }) {
       withTiming(0, { duration: 480 }),
     );
     const id = setTimeout(() => {
-      y.value = withRepeat(hop, -1);
+      y.set(withRepeat(hop, -1));
     }, delay);
     return () => clearTimeout(id);
   }, [delay, reduce, y]);

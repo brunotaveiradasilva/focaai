@@ -38,11 +38,11 @@ export function PressableScale({
     <AnimatedPressable
       {...rest}
       onPressIn={(e) => {
-        scale.value = withTiming(softenScale(scaleTo), { duration: PRESS_IN_MS, easing: EASE_OUT });
+        scale.set(withTiming(softenScale(scaleTo), { duration: PRESS_IN_MS, easing: EASE_OUT }));
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        scale.value = withTiming(1, { duration: PRESS_OUT_MS, easing: EASE_OUT });
+        scale.set(withTiming(1, { duration: PRESS_OUT_MS, easing: EASE_OUT }));
         onPressOut?.(e);
       }}
       style={[style, anim]}>

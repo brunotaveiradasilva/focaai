@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -16,6 +16,9 @@ import { enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
 const COUNTS = [5, 10, 20, 45, 90];
+
+// Only called from event handlers, never during render.
+const newSimuladoId = () => `${Date.now()}`;
 
 // Banco de Questões — simulados sob medida com questões reais do ENEM
 export default function Questoes() {
@@ -33,13 +36,16 @@ export default function Questoes() {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // The roadmap can open this tab with an area already chosen.
-  useEffect(() => {
+  // The roadmap can open this tab with an area already chosen; adjust state during
+  // render when the param changes instead of syncing it in an effect.
+  const [prevArea, setPrevArea] = useState(params.area);
+  if (params.area !== prevArea) {
+    setPrevArea(params.area);
     if (params.area) {
       setAreas([params.area]);
       setCount(10);
     }
-  }, [params.area]);
+  }
 
   const totals = questionTotals(checkins, simulados);
   const weakAreas = [...new Set(SUBJECTS.filter((s) => profile.levels[s.id] === 1).map((s) => areaOfSubject(s.id)))];
@@ -55,7 +61,7 @@ export default function Questoes() {
       );
       if (!questions.length) throw new Error('empty');
       startSimulado({
-        id: `${Date.now()}`,
+        id: newSimuladoId(),
         createdAt: new Date().toISOString(),
         areas: cfgAreas,
         questions,
