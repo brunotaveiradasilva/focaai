@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# local env (valores públicos do app, mas cada máquina tem os seus)
+.env
