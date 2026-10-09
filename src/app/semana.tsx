@@ -2,17 +2,25 @@ import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 
 import { RoutineEditor } from '@/components/routine-editor';
-import { Button, Kicker, Screen, Sub, Title } from '@/components/ui';
+import { Button, Kicker, Loading, Screen, Sub, Title } from '@/components/ui';
+import { usePlanPreview, useStudentState, useUpdateProfile } from '@/lib/queries';
 import { DEFAULT_ROUTINE, Routine } from '@/lib/routine';
+import type { Profile } from '@/lib/types';
 import { useApp } from '@/store/app';
 
 // Shown on launch to students who haven't told the app about their fixed week yet
 // (profiles made before this step joined the onboarding).
 export default function Semana() {
-  const profile = useApp((s) => s.profile);
-  const updateProfile = useApp((s) => s.updateProfile);
-  const [routine, setRoutine] = useState<Routine>(profile?.routine ?? DEFAULT_ROUTINE);
-  if (!profile) return <Redirect href="/" />;
+  const state = useStudentState();
+  if (!state.data) return <Loading error={state.isError} onRetry={() => state.refetch()} />;
+  if (!state.data.profile) return <Redirect href="/" />;
+  return <WeekPrompt profile={state.data.profile} />;
+}
+
+function WeekPrompt({ profile }: { profile: Profile }) {
+  const updateProfile = useUpdateProfile();
+  const [routine, setRoutine] = useState<Routine>(profile.routine ?? DEFAULT_ROUTINE);
+  const preview = usePlanPreview({ ...profile, routine });
 
   return (
     <Screen
@@ -29,7 +37,7 @@ export default function Semana() {
           <Button
             label="Salvar minha semana"
             onPress={() => {
-              updateProfile({ routine });
+              updateProfile.mutate({ routine });
               router.replace('/hoje');
             }}
           />
@@ -41,7 +49,7 @@ export default function Semana() {
         Cadastre escola, trabalho, inglês, esporte, hobbies e tudo que se repete. O cronograma usa só os horários livres.
         Você pode mudar isso depois no Perfil.
       </Sub>
-      <RoutineEditor value={routine} onChange={setRoutine} week={profile.week} />
+      <RoutineEditor value={routine} onChange={setRoutine} week={profile.week} free={preview.data?.free} />
     </Screen>
   );
 }

@@ -1,32 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
 import { CheckinSheet, CheckinTarget } from '@/components/checkin-sheet';
 import { IconName, SUBJECT_ICON, onColor } from '@/components/subject-style';
-import { Card, Kicker, PressableScale, Screen } from '@/components/ui';
+import { Card, Kicker, Loading, PressableScale, Screen } from '@/components/ui';
 import { CYCLES, subjectById } from '@/data/catalog';
-import { formatMin } from '@/lib/coach';
-import {
-  ACTIVITY_LABEL,
-  DAY_LETTERS,
-  DAY_NAMES,
-  PERIODS,
-  Task,
-  addDays,
-  dateKey,
-  daysBetween,
-  goalLabel,
-  startOfWeek,
-  upcomingExamDates,
-  weekPlan,
-  weekdayIndex,
-} from '@/lib/planner';
-import { doneTaskIds, minutesOn, overdueTasks, streak } from '@/lib/stats';
-import { Obstacle, Profile, useApp } from '@/store/app';
+import { ACTIVITY_LABEL, DAY_LETTERS, DAY_NAMES, PERIODS, addDays, dateKey, daysBetween, fromKey, weekdayIndex } from '@/lib/calendar';
+import { formatMin } from '@/lib/format';
+import { useDismissTask, useProfile, useStats, useStudentState, useWeek } from '@/lib/queries';
+import type { ExamDate, Obstacle, Profile, Task } from '@/lib/types';
 import { enterFade, enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -52,42 +38,27 @@ const taskColor = (t: Task) => (t.subject ? subjectById(t.subject).color : color
 
 // Início — organização e disciplina do dia
 export default function Hoje() {
-  const profile = useApp((s) => s.profile)!;
-  const progress = useApp((s) => s.progress);
-  const focus = useApp((s) => s.focus);
-  const boost = useApp((s) => s.boost);
-  const checkins = useApp((s) => s.checkins);
-  const simulados = useApp((s) => s.simulados);
-  const adjustments = useApp((s) => s.adjustments);
-  const plans = useApp((s) => s.plans);
-  const dismissed = useApp((s) => s.dismissed);
-  const setPlan = useApp((s) => s.setPlan);
-  const dismissTask = useApp((s) => s.dismissTask);
+  const profile = useProfile()!;
+  const adjustments = useStudentState().data?.adjustments ?? [];
+  const week = useWeek();
+  const stats = useStats(7);
+  const dismissTask = useDismissTask();
 
-  const today = new Date();
-  const todayKey = dateKey(today);
-  const [selected, setSelected] = useState(weekdayIndex(today));
+  const [selected, setSelected] = useState(weekdayIndex(new Date()));
   const [checkin, setCheckin] = useState<CheckinTarget | null>(null);
   const [showOverdue, setShowOverdue] = useState(false);
 
-  // Past days and today use the frozen plan; future days preview the live one.
-  const live = weekPlan(profile, progress, focus, boost, today);
-  const monday = startOfWeek(today);
-  const weekTasks = DAY_NAMES.flatMap((_, day) => {
-    const key = dateKey(addDays(monday, day));
-    return key <= todayKey && plans[key] ? plans[key] : live.filter((t) => t.date === key);
-  });
+  if (!week.data) return <Loading error={week.isError} onRetry={() => week.refetch()} />;
+
+  // The API freezes today's plan the first time the day is opened; past days keep theirs.
+  const { today: todayKey, tasks: weekTasks, overdue, summary } = week.data;
+  const today = fromKey(todayKey);
+  const monday = addDays(today, -weekdayIndex(today));
   const todayTasks = weekTasks.filter((t) => t.date === todayKey);
-
-  useEffect(() => {
-    if (!plans[todayKey]) setPlan(todayKey, todayTasks);
-  }, [todayKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const done = doneTaskIds(checkins, simulados, weekTasks);
-  const overdue = overdueTasks(plans, checkins, simulados, dismissed, today);
-  const studied = minutesOn(checkins, todayKey);
+  const done = new Set(week.data.done);
+  const studied = stats.data?.minutesToday ?? 0;
   const goal = todayTasks.reduce((a, t) => a + t.minutes, 0);
-  const days = streak(profile, checkins, simulados, today);
+  const days = stats.data?.streak ?? 0;
   const weekDone = weekTasks.filter((t) => done.has(t.id)).length;
   const firstName = profile.name.split(' ')[0];
   const recentAdj = adjustments.find((a) => daysBetween(new Date(a.at), today) <= 3);
@@ -109,14 +80,14 @@ export default function Hoje() {
         <View style={{ flex: 1 }}>
           <Kicker>{today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</Kicker>
           <Text style={styles.hello}>Oi, {firstName}</Text>
-          <Text style={styles.goal}>{goalLabel(profile)}</Text>
+          <Text style={styles.goal}>{summary.goalLabel}</Text>
         </View>
         <PressableScale scaleTo={0.9} onPress={() => router.push('/perfil')} accessibilityLabel="Abrir perfil" style={styles.avatar}>
           <Text style={styles.avatarText}>{firstName[0]?.toUpperCase()}</Text>
         </PressableScale>
       </View>
 
-      <Countdown profile={profile} />
+      <Countdown profile={profile} dates={summary.examDates} />
 
       <View style={styles.stats}>
         <Tile icon="flame" color={colors.gold} value={`${days}`} label={days === 1 ? 'dia seguido' : 'dias seguidos'} />
@@ -181,7 +152,7 @@ export default function Hoje() {
                   <PressableScale scaleTo={0.9} onPress={() => open(t)} style={styles.smallBtn}>
                     <Text style={styles.smallBtnText}>Fiz</Text>
                   </PressableScale>
-                  <PressableScale scaleTo={0.9} onPress={() => dismissTask(t.id)} style={[styles.smallBtn, styles.smallGhost]}>
+                  <PressableScale scaleTo={0.9} onPress={() => dismissTask.mutate(t.id)} style={[styles.smallBtn, styles.smallGhost]}>
                     <Text style={[styles.smallBtnText, { color: colors.muted }]}>Dispensar</Text>
                   </PressableScale>
                 </View>
@@ -282,8 +253,8 @@ function TaskCard({ task, done, onPress }: { task: Task; done: boolean; onPress:
   );
 }
 
-function Countdown({ profile }: { profile: Profile }) {
-  const dates = upcomingExamDates(profile);
+function Countdown({ profile, dates: upcoming }: { profile: Profile; dates: ExamDate[] }) {
+  const dates = upcoming.map((d) => ({ exam: { id: d.examId, name: d.examName }, phase: d.phase, date: fromKey(d.date) }));
   if (profile.cycle !== CYCLES[0] || !dates.length) {
     return (
       <Card style={styles.countdown}>

@@ -8,9 +8,10 @@ import { Sheet } from '@/components/sheet';
 import { SUBJECT_ICON, onColor, shade } from '@/components/subject-style';
 import { Card, Pill, PillRow, PressableScale, Stepper } from '@/components/ui';
 import { SubjectId, subjectById, topicById } from '@/data/catalog';
-import { MIN_CHECKIN_MIN, evaluateCheckin, formatMin } from '@/lib/coach';
-import { ACTIVITY_LABEL, Activity, Task } from '@/lib/planner';
-import { useApp } from '@/store/app';
+import { ACTIVITY_LABEL } from '@/lib/calendar';
+import { MIN_CHECKIN_MIN, formatMin } from '@/lib/format';
+import { useLogCheckin } from '@/lib/queries';
+import type { Activity, Task } from '@/lib/types';
 import { enterFade } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -58,7 +59,7 @@ export function CheckinSheet({ target, onClose }: { target: CheckinTarget | null
 }
 
 function CheckinBody({ target, onClose }: { target: CheckinTarget; onClose: () => void }) {
-  const logCheckin = useApp((s) => s.logCheckin);
+  const logCheckin = useLogCheckin();
   const task = target.task;
   const subjectId = task?.subject ?? target.subject;
   const topicId = task?.topicId ?? target.topicId;
@@ -78,38 +79,32 @@ function CheckinBody({ target, onClose }: { target: CheckinTarget; onClose: () =
   const title = task?.title ?? topic?.title ?? 'Estudo livre';
   const timeOptions = [...new Set([15, 30, 45, 60, 90, 120, planned])].sort((a, b) => a - b);
 
-  const save = () => {
-    const { lessons, adj } = evaluateCheckin({
-      activity,
-      subject: subjectId,
-      topicId,
-      minutes,
-      plannedMin: planned,
-      feeling,
-      questions,
-      correct: Math.min(correct, questions),
-    });
-    logCheckin(
-      {
-        id: `${Date.now()}`,
+  const [error, setError] = useState<string | null>(null);
+
+  // The API weighs the check-in: lessons credited, the subject's weight in the plan and why.
+  const save = async () => {
+    setError(null);
+    try {
+      const { lessons, adjustment } = await logCheckin.mutateAsync({
         at: new Date().toISOString(),
         taskId: minutes >= MIN_CHECKIN_MIN ? task?.id : undefined,
         subject: subjectId,
         topicId,
+        activity,
         minutes,
         feeling,
         questions,
         correct: Math.min(correct, questions),
-      },
-      lessons,
-      adj,
-    );
-    setResult(
-      minutes < MIN_CHECKIN_MIN
-        ? `Registrado no histórico. Sessões com menos de ${MIN_CHECKIN_MIN} min não concluem a tarefa.`
-        : adj?.text ??
-            `Boa! ${formatMin(minutes)} registrados${lessons > 0 && topic ? ` e você avançou ${lessons} ${lessons === 1 ? 'aula' : 'aulas'} em ${topic.title}` : ''}.`,
-    );
+      });
+      setResult(
+        minutes < MIN_CHECKIN_MIN
+          ? `Registrado no histórico. Sessões com menos de ${MIN_CHECKIN_MIN} min não concluem a tarefa.`
+          : adjustment?.text ??
+              `Boa! ${formatMin(minutes)} registrados${lessons > 0 && topic ? ` e você avançou ${lessons} ${lessons === 1 ? 'aula' : 'aulas'} em ${topic.title}` : ''}.`,
+      );
+    } catch {
+      setError('Não deu para registrar agora. Confira sua internet e tente de novo.');
+    }
   };
 
   if (result) {
@@ -210,8 +205,16 @@ function CheckinBody({ target, onClose }: { target: CheckinTarget; onClose: () =
         </>
       ) : null}
 
-      <View style={{ marginTop: 10 }}>
-        <Chunky width="100%" height={50} radius={14} face={color} base={shade(color)} onPress={save} label="Registrar estudo">
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={{ marginTop: 10, opacity: logCheckin.isPending ? 0.5 : 1 }}>
+        <Chunky
+          width="100%"
+          height={50}
+          radius={14}
+          face={color}
+          base={shade(color)}
+          onPress={logCheckin.isPending ? undefined : save}
+          label="Registrar estudo">
           <Text style={[styles.cta, { color: onColor(color) }]}>REGISTRAR ESTUDO</Text>
         </Chunky>
       </View>
@@ -220,6 +223,7 @@ function CheckinBody({ target, onClose }: { target: CheckinTarget; onClose: () =
 }
 
 const styles = StyleSheet.create({
+  error: { fontFamily: fonts.medium, fontSize: 13, color: colors.danger, marginTop: 8 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   icon: { width: 52, height: 52, borderRadius: 26, borderBottomWidth: 4, alignItems: 'center', justifyContent: 'center' },
   kicker: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1, marginBottom: 2 },

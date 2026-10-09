@@ -6,12 +6,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import { RoutineEditor } from '@/components/routine-editor';
 import { Sheet } from '@/components/sheet';
 import { SUBJECT_ICON } from '@/components/subject-style';
-import { Button, Card, Kicker, Pill, PillRow, PressableScale, Screen, Title } from '@/components/ui';
+import { Button, Card, Kicker, Loading, Pill, PillRow, PressableScale, Screen, Title } from '@/components/ui';
 import { EXAM_CALENDAR, SUBJECTS, TIERS, courseById } from '@/data/catalog';
-import { formatMin } from '@/lib/coach';
-import { followedExams, goalLabel, weeklyMinutes } from '@/lib/planner';
-import { DEFAULT_ROUTINE, fmtTime } from '@/lib/routine';
-import { useApp } from '@/store/app';
+import { formatMin } from '@/lib/format';
+import { usePlanPreview, usePlanSummary, useProfile, useResetStudy, useUpdateProfile } from '@/lib/queries';
+import { DEFAULT_ROUTINE, Routine, fmtTime } from '@/lib/routine';
 import { useSession } from '@/store/session';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -21,20 +20,23 @@ const SESSIONS = [50, 90, 120];
 
 // Perfil do estudante
 export default function Perfil() {
-  const profile = useApp((s) => s.profile);
-  const updateProfile = useApp((s) => s.updateProfile);
-  const reset = useApp((s) => s.reset);
+  const profile = useProfile();
+  const updateProfile = useUpdateProfile();
+  const resetStudy = useResetStudy();
+  const plan = usePlanSummary().data;
   const [confirm, setConfirm] = useState(false);
-  const [editWeek, setEditWeek] = useState(false);
+  // The week being edited in the sheet; saved once, on "Pronto".
+  const [routineDraft, setRoutineDraft] = useState<Routine | null>(null);
+  const preview = usePlanPreview(profile && routineDraft ? { ...profile, routine: routineDraft } : null);
   const user = useSession((s) => s.user);
   const signOut = useSession((s) => s.signOut);
   const deleteAccount = useSession((s) => s.deleteAccount);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  if (!profile) return null;
+  if (!profile) return <Loading />;
 
   const course = courseById(profile.courseId);
-  const exams = followedExams(profile);
+  const exams = plan?.exams ?? [];
 
   return (
     <Screen>
@@ -45,7 +47,7 @@ export default function Perfil() {
         <Kicker style={{ marginBottom: 0 }}>Perfil</Kicker>
       </View>
       <Title>{profile.name}</Title>
-      <Text style={styles.muted}>{goalLabel(profile)}</Text>
+      <Text style={styles.muted}>{plan?.goalLabel}</Text>
 
       <Card style={{ gap: 8, marginTop: 14 }}>
         <Text style={styles.cardTitle}>Objetivo</Text>
@@ -56,17 +58,17 @@ export default function Perfil() {
 
       <Card style={{ gap: 4 }}>
         <Text style={styles.cardTitle}>Rotina</Text>
-        <Text style={styles.muted}>{formatMin(weeklyMinutes(profile))} por semana. Mudar aqui refaz o cronograma a partir de amanhã.</Text>
+        <Text style={styles.muted}>{plan ? `${formatMin(plan.weeklyMinutes)} por semana.` : ''} Mudar aqui refaz o cronograma a partir de amanhã.</Text>
         <Text style={styles.label}>Tempo por dia</Text>
         <PillRow>
           {DAILY.map((m) => (
-            <Pill key={m} label={formatMin(m)} selected={profile.minutesPerDay === m} onPress={() => updateProfile({ minutesPerDay: m })} />
+            <Pill key={m} label={formatMin(m)} selected={profile.minutesPerDay === m} onPress={() => updateProfile.mutate({ minutesPerDay: m })} />
           ))}
         </PillRow>
         <Text style={styles.label}>Duração dos blocos</Text>
         <PillRow>
           {SESSIONS.map((m) => (
-            <Pill key={m} label={formatMin(m)} selected={profile.sessionMin === m} onPress={() => updateProfile({ sessionMin: m })} />
+            <Pill key={m} label={formatMin(m)} selected={profile.sessionMin === m} onPress={() => updateProfile.mutate({ sessionMin: m })} />
           ))}
         </PillRow>
         <Text style={styles.label}>Semana fixa</Text>
@@ -75,17 +77,23 @@ export default function Perfil() {
             ? `Acorda ${fmtTime(profile.routine.wake)}, dorme ${fmtTime(profile.routine.sleep)} · ${profile.routine.items.length} compromissos na semana`
             : 'Nada cadastrado: o cronograma usa os turnos marcados inteiros.'}
         </Text>
-        <Button label="Editar minha semana" variant="ghost" style={{ marginTop: 10 }} onPress={() => setEditWeek(true)} />
+        <Button label="Editar minha semana" variant="ghost" style={{ marginTop: 10 }} onPress={() => setRoutineDraft(profile.routine ?? DEFAULT_ROUTINE)} />
       </Card>
 
-      <Sheet visible={editWeek} onClose={() => setEditWeek(false)}>
+      <Sheet visible={!!routineDraft} onClose={() => setRoutineDraft(null)}>
         <Text style={styles.sheetTitle}>Sua semana</Text>
-        <RoutineEditor
-          value={profile.routine ?? DEFAULT_ROUTINE}
-          onChange={(routine) => updateProfile({ routine })}
-          week={profile.week}
+        {routineDraft ? (
+          <RoutineEditor value={routineDraft} onChange={setRoutineDraft} week={profile.week} free={preview.data?.free} />
+        ) : null}
+        <Button
+          label="Pronto"
+          variant="ghost"
+          style={{ marginTop: 10 }}
+          onPress={() => {
+            if (routineDraft) updateProfile.mutate({ routine: routineDraft });
+            setRoutineDraft(null);
+          }}
         />
-        <Button label="Pronto" variant="ghost" style={{ marginTop: 10 }} onPress={() => setEditWeek(false)} />
       </Sheet>
 
       <Card style={{ gap: 8 }}>
@@ -96,7 +104,7 @@ export default function Perfil() {
             <Text style={styles.levelName}>{s.name}</Text>
             <PressableScale
               scaleTo={0.9}
-              onPress={() => updateProfile({ levels: { ...profile.levels, [s.id]: ((profile.levels[s.id] % 3) + 1) as 1 | 2 | 3 } })}
+              onPress={() => updateProfile.mutate({ levels: { ...profile.levels, [s.id]: ((profile.levels[s.id] % 3) + 1) as 1 | 2 | 3 } })}
               style={styles.levelBtn}>
               <Text style={styles.levelText}>{LEVEL_LABEL[profile.levels[s.id]]}</Text>
             </PressableScale>
@@ -150,14 +158,13 @@ export default function Perfil() {
 
       <Sheet visible={confirm} onClose={() => setConfirm(false)}>
         <Text style={styles.sheetTitle}>Apagar todos os dados?</Text>
-        <Text style={styles.muted}>Perfil, check-ins, simulados e progresso do roadmap deste aparelho serão apagados. Não dá para desfazer.</Text>
+        <Text style={styles.muted}>Perfil, check-ins, simulados e progresso do roadmap serão apagados da sua conta, em todos os aparelhos. A conta continua. Não dá para desfazer.</Text>
         <View style={{ gap: 10, marginTop: 16 }}>
           <Button
             label="Apagar tudo"
             onPress={() => {
               setConfirm(false);
-              reset();
-              router.replace('/');
+              resetStudy.mutate(undefined, { onSuccess: () => router.replace('/') });
             }}
           />
           <Button label="Cancelar" variant="ghost" style={{ flexGrow: 1 }} onPress={() => setConfirm(false)} />

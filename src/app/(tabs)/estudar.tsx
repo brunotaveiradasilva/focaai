@@ -7,21 +7,9 @@ import { CheckinSheet, CheckinTarget, MaterialLinks } from '@/components/checkin
 import { Chunky, GroupHeader, PathNode, SubjectChip, UnitBanner } from '@/components/roadmap';
 import { Sheet } from '@/components/sheet';
 import { IconName, SUBJECT_ICON, onColor, shade } from '@/components/subject-style';
-import { PressableScale, ProgressBar, Screen } from '@/components/ui';
-import {
-  RoadTopic,
-  SUBJECTS,
-  SubjectId,
-  TRACK_LABEL,
-  VESTIBULARES,
-  areaOfSubject,
-  isMinor,
-  roadmap,
-  subjectById,
-} from '@/data/catalog';
-import { editalOfExam, examWeight } from '@/data/edital';
-import { currentTopic, examIdsOf, topicState } from '@/lib/planner';
-import { useApp } from '@/store/app';
+import { Loading, PressableScale, ProgressBar, Screen } from '@/components/ui';
+import { RoadTopic, SUBJECTS, SubjectId, TRACK_LABEL, VESTIBULARES, areaOfSubject, isMinor, subjectById } from '@/data/catalog';
+import { useProfile, useRoadmap, useSetFocus, useSetTopicDone } from '@/lib/queries';
 import { colors, fonts } from '@/theme/tokens';
 
 // Horizontal offsets that make the path snake left and right, Duolingo-style.
@@ -32,42 +20,43 @@ const STATUS_LABEL = { done: 'Concluído', doing: 'Em andamento', todo: 'Não in
 const examName = (id: string) => (id === 'enem' ? 'ENEM' : (VESTIBULARES.find((v) => v.id === id)?.name ?? id));
 
 // How each followed exam's edital treats a topic, e.g. "ENEM: citado no edital".
-function weightLines(topicId: string, examIds: string[]) {
-  return examIds.map((id) => {
-    if (!editalOfExam(id)) return `${examName(id)}: edital ainda não mapeado`;
-    const w = examWeight(id, topicId);
-    return `${examName(id)}: ${w >= 1 ? 'citado no edital' : w > 0 ? 'citado em parte' : 'fora do edital'}`;
+function weightLines(topic: RoadTopic) {
+  return (topic.exams ?? []).map((e) => {
+    if (!e.mapped) return `${examName(e.examId)}: edital ainda não mapeado`;
+    return `${examName(e.examId)}: ${e.weight >= 1 ? 'citado no edital' : e.weight > 0 ? 'citado em parte' : 'fora do edital'}`;
   });
 }
 
 // Roadmap — livre: qualquer assunto, na ordem que o aluno quiser
 export default function Estudar() {
-  const profile = useApp((s) => s.profile)!;
-  const progress = useApp((s) => s.progress);
-  const focus = useApp((s) => s.focus);
-  const setFocus = useApp((s) => s.setFocus);
-  const setTopicDone = useApp((s) => s.setTopicDone);
+  const profile = useProfile()!;
+  const setFocus = useSetFocus();
+  const setTopicDone = useSetTopicDone();
 
   const weak = SUBJECTS.filter((s) => profile.levels[s.id] === 1).map((s) => s.id);
   const [subjectId, setSubjectId] = useState<SubjectId>(weak[0] ?? 'mat');
-  const [open, setOpen] = useState<RoadTopic | null>(null);
+  // By id, so the sheet shows the topic's new state after marking it.
+  const [openId, setOpenId] = useState<string | null>(null);
   const [checkin, setCheckin] = useState<CheckinTarget | null>(null);
+  const roadmap = useRoadmap(subjectId);
 
-  const subject = subjectById(subjectId);
-  const examIds = examIdsOf(profile);
-  const path = roadmap(subjectId, examIds);
-  const current = currentTopic(subjectId, progress, focus, examIds);
-  const isDone = (t: RoadTopic) => topicState(t, progress) === 'done';
+  if (!roadmap.data) return <Loading error={roadmap.isError} onRetry={() => roadmap.refetch()} />;
+
+  const subject = subjectById(roadmap.data.subject);
+  const path = roadmap.data.topics;
+  const current = path.find((t) => t.id === roadmap.data.current) ?? path[path.length - 1];
+  const isDone = (t: (typeof path)[number]) => t.state === 'done';
   const content = path.filter((t) => !t.final);
   const sorted = [...SUBJECTS].sort((a, b) => Number(weak.includes(b.id)) - Number(weak.includes(a.id)));
-  const doneOf = (topic: RoadTopic) => Math.min(topic.lessons, progress[topic.id] ?? 0);
   const groupStats = (groupId: string) => {
     const g = path.filter((t) => t.groupId === groupId);
     return { done: g.filter(isDone).length, total: g.length };
   };
 
-  const openState = open ? topicState(open, progress) : null;
-  const isFocus = !!open && focus[subjectId] === open.id;
+  const open = path.find((t) => t.id === openId) ?? null;
+  const openState = open?.state ?? null;
+  const isFocus = !!open?.focus;
+  const setOpen = (t: RoadTopic | null) => setOpenId(t?.id ?? null);
 
   return (
     <Screen>
@@ -106,10 +95,10 @@ export default function Estudar() {
               <PathNode
                 topic={topic}
                 subject={subject}
-                state={topicState(topic, progress)}
-                done={doneOf(topic)}
+                state={topic.state}
+                done={topic.done}
                 isCurrent={topic.id === current.id}
-                isFocus={focus[subjectId] === topic.id}
+                isFocus={topic.focus}
                 index={i}
                 offset={OFFSETS[i % OFFSETS.length]}
                 onPress={() => setOpen(topic)}
@@ -135,12 +124,12 @@ export default function Estudar() {
               </View>
             </View>
             <Text style={styles.sheetD}>
-              {open.final ? open.desc : [open.groupName, ...weightLines(open.id, examIds)].join('\n')}
+              {open.final ? open.desc : [open.groupName, ...weightLines(open)].join('\n')}
             </Text>
             <View style={{ marginVertical: 14 }}>
-              <ProgressBar value={doneOf(open) / open.lessons} color={subject.color} />
+              <ProgressBar value={open.done / open.lessons} color={subject.color} />
               <Text style={styles.meta}>
-                {doneOf(open)} de {open.lessons} aulas
+                {open.done} de {open.lessons} aulas
               </Text>
             </View>
 
@@ -179,12 +168,12 @@ export default function Estudar() {
               <Action
                 icon={isFocus ? 'flag' : 'flag-outline'}
                 label={isFocus ? 'Remover foco' : 'Definir como foco'}
-                onPress={() => setFocus(subjectId, isFocus ? null : open.id)}
+                onPress={() => setFocus.mutate({ subject: subjectId, topicId: isFocus ? null : open.id })}
               />
               <Action
                 icon={openState === 'done' ? 'arrow-undo' : 'checkmark-done'}
                 label={openState === 'done' ? 'Desmarcar' : 'Já sei esse'}
-                onPress={() => setTopicDone(open.id, openState !== 'done')}
+                onPress={() => setTopicDone.mutate({ topicId: open.id, done: openState !== 'done' })}
               />
             </View>
             <Text style={styles.hint}>

@@ -7,11 +7,10 @@ import Animated from 'react-native-reanimated';
 import { AutoImage, QuestionText } from '@/components/question-text';
 import { Chunky } from '@/components/roadmap';
 import { AREA_STYLE, shade } from '@/components/subject-style';
-import { Card, Kicker, PressableScale, ProgressBar, Screen } from '@/components/ui';
+import { Card, Kicker, Loading, PressableScale, ProgressBar, Screen } from '@/components/ui';
 import { AREAS, areaById } from '@/data/catalog';
-import { formatMin } from '@/lib/coach';
-import { scoreOf } from '@/lib/stats';
-import { useApp } from '@/store/app';
+import { formatMin } from '@/lib/format';
+import { useSimulado } from '@/lib/queries';
 import { enterFade, enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -27,11 +26,15 @@ function verdict(pct: number) {
 // Resultado do simulado
 export default function Resultado() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const sim = useApp((s) => s.simulados.find((x) => x.id === id));
+  const query = useSimulado(id);
   const [open, setOpen] = useState<string | null>(null);
-  if (!sim) return <Redirect href="/questoes" />;
+  if (query.isError) return <Redirect href="/questoes" />;
+  if (!query.data) return <Loading />;
+  const sim = query.data;
+  // An unfinished simulado has no answer key yet: it belongs on the exam screen.
+  if (!sim.score) return <Redirect href="/simulado" />;
 
-  const sc = scoreOf(sim);
+  const sc = sim.score;
   const pct = sc.total ? Math.round((sc.correct / sc.total) * 100) : 0;
   const color = pct >= 70 ? colors.accent : pct >= 50 ? colors.gold : colors.danger;
   const perQ = sc.total ? Math.round(sim.seconds / sc.total) : 0;
