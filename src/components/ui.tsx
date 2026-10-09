@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactNode } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   PressableProps,
   ScrollView,
@@ -77,6 +78,24 @@ export function Screen({
         {footer ? <View style={styles.footer}>{footer}</View> : null}
       </View>
     </SafeAreaView>
+  );
+}
+
+// A screen whose data is still coming from the API, or failed to.
+export function Loading({ error, onRetry }: { error?: boolean; onRetry?: () => void }) {
+  return (
+    <Screen scroll={false} contentStyle={{ justifyContent: 'center', alignItems: 'center', gap: 14 }}>
+      {error ? (
+        <>
+          <Text style={[styles.btnText, { color: colors.muted, textAlign: 'center' }]}>
+            Não deu para carregar. Confira sua internet.
+          </Text>
+          {onRetry ? <Button label="Tentar de novo" onPress={onRetry} style={{ alignSelf: 'stretch' }} /> : null}
+        </>
+      ) : (
+        <ActivityIndicator color={colors.accent} />
+      )}
+    </Screen>
   );
 }
 

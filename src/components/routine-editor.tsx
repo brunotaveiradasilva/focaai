@@ -3,17 +3,17 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button, Pill, PillRow, PressableScale } from '@/components/ui';
-import { formatMin } from '@/lib/coach';
-import { DAYS, DAY_NAMES, PERIODS } from '@/lib/planner';
+import { DAYS, DAY_NAMES, PERIODS } from '@/lib/calendar';
+import { formatMin } from '@/lib/format';
 import {
   ACTIVITY_KINDS,
   ActivityKind,
   COMMUTES,
+  MIN_FREE,
   PRESETS,
   Routine,
   RoutineItem,
   fmtTime,
-  freeMinutes,
   kindLabel,
   newItemId,
 } from '@/lib/routine';
@@ -24,15 +24,18 @@ const DAY_MIN = 24 * 60;
 const WEEKDAYS = [0, 1, 2, 3, 4];
 
 // Fixed commitments of the week: wake/sleep/lunch, recurring activities per day, and the
-// study time each day keeps in the periods the student marked as free (`week`).
+// study time each day keeps in the periods the student marked as free (`week`). `free` is that
+// time per day and period, worked out by the API from `value` (POST /api/plano/previa).
 export function RoutineEditor({
   value,
   onChange,
   week,
+  free,
 }: {
   value: Routine;
   onChange: (r: Routine) => void;
   week?: boolean[];
+  free?: number[][] | null;
 }) {
   const [day, setDay] = useState(0);
   const [kind, setKind] = useState<ActivityKind>('escola');
@@ -62,7 +65,7 @@ export function RoutineEditor({
   };
 
   const marked = week ? [0, 1, 2].filter((p) => week[p * 7 + day]) : [];
-  const freeToday = marked.map((p) => freeMinutes(value, day, p)).filter((m) => m >= 30);
+  const freeToday = marked.map((p) => free?.[day]?.[p] ?? 0).filter((m) => m >= MIN_FREE);
 
   return (
     <View>
@@ -132,7 +135,7 @@ export function RoutineEditor({
       ) : (
         <Text style={styles.hint}>Nada cadastrado. Este dia está livre.</Text>
       )}
-      {week ? (
+      {week && free ? (
         <Text style={[styles.hint, { marginTop: 8 }]}>
           {marked.length === 0
             ? `Você não marcou horário de estudo na ${DAY_NAMES[day]}.`
