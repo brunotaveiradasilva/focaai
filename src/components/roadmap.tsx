@@ -54,10 +54,10 @@ export function Chunky({
     <Pressable
       onPress={onPress}
       onPressIn={() => {
-        press.value = withTiming(1, { duration: 80, easing: EASE_OUT });
+        press.set(withTiming(1, { duration: 80, easing: EASE_OUT }));
       }}
       onPressOut={() => {
-        press.value = withTiming(0, { duration: PRESS_OUT_MS, easing: EASE_OUT });
+        press.set(withTiming(0, { duration: PRESS_OUT_MS, easing: EASE_OUT }));
       }}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -173,7 +173,7 @@ function Pulse({ size, color }: { size: number; color: string }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (reduce) return;
-    t.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), -1);
+    t.set(withRepeat(withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), -1));
   }, [reduce, t]);
   const style = useAnimatedStyle(() => ({
     opacity: 0.22 * (1 - t.value),
@@ -222,12 +222,14 @@ function StartBubble({ label, color, tint }: { label: string; color: string; tin
   const y = useSharedValue(0);
   useEffect(() => {
     if (reduce) return;
-    y.value = withRepeat(
-      withSequence(
-        withTiming(-2.5, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
+    y.set(
+      withRepeat(
+        withSequence(
+          withTiming(-2.5, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
+          withTiming(0, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1,
       ),
-      -1,
     );
   }, [reduce, y]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
