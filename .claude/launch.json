@@ -6,7 +6,7 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
       "port": 8082,
-      "autoPort": false
+      "autoPort": true
     }
   ]
 }
