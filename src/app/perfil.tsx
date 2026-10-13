@@ -12,6 +12,7 @@ import { formatMin } from '@/lib/coach';
 import { followedExams, goalLabel, weeklyMinutes } from '@/lib/planner';
 import { DEFAULT_ROUTINE, fmtTime } from '@/lib/routine';
 import { useApp } from '@/store/app';
+import { useSession } from '@/store/session';
 import { colors, fonts } from '@/theme/tokens';
 
 const LEVEL_LABEL = { 1: 'Difícil', 2: 'Razoável', 3: 'Domino' } as const;
@@ -25,6 +26,11 @@ export default function Perfil() {
   const reset = useApp((s) => s.reset);
   const [confirm, setConfirm] = useState(false);
   const [editWeek, setEditWeek] = useState(false);
+  const user = useSession((s) => s.user);
+  const signOut = useSession((s) => s.signOut);
+  const deleteAccount = useSession((s) => s.deleteAccount);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   if (!profile) return null;
 
   const course = courseById(profile.courseId);
@@ -107,10 +113,40 @@ export default function Perfil() {
         </Text>
       </Card>
 
+      <Card style={{ gap: 4 }}>
+        <Text style={styles.cardTitle}>Conta</Text>
+        <Text style={styles.muted}>{user?.name ? `${user.name} · ${user.email}` : user?.email}</Text>
+      </Card>
+
       <View style={{ gap: 10, marginTop: 6 }}>
         <Button label="Refazer o questionário" variant="ghost" style={{ flexGrow: 1 }} onPress={() => router.push('/onboarding')} />
         <Button label="Apagar meus dados" variant="ghost" style={{ flexGrow: 1 }} onPress={() => setConfirm(true)} />
+        <Button label="Sair da conta" variant="ghost" style={{ flexGrow: 1 }} onPress={() => signOut()} />
+        <Button label="Excluir minha conta" variant="ghost" style={{ flexGrow: 1 }} onPress={() => setConfirmDelete(true)} />
       </View>
+
+      <Sheet visible={confirmDelete} onClose={() => setConfirmDelete(false)}>
+        <Text style={styles.sheetTitle}>Excluir sua conta?</Text>
+        <Text style={styles.muted}>
+          A conta {user?.email} e tudo o que está nela serão apagados, neste aparelho e no servidor. Não dá para desfazer.
+        </Text>
+        {deleteError ? <Text style={[styles.muted, { color: colors.danger, marginTop: 8 }]}>{deleteError}</Text> : null}
+        <View style={{ gap: 10, marginTop: 16 }}>
+          <Button
+            label="Excluir conta"
+            onPress={async () => {
+              setDeleteError(null);
+              try {
+                await deleteAccount();
+                setConfirmDelete(false);
+              } catch {
+                setDeleteError('Não deu para excluir agora. Confira sua internet e tente de novo.');
+              }
+            }}
+          />
+          <Button label="Cancelar" variant="ghost" style={{ flexGrow: 1 }} onPress={() => setConfirmDelete(false)} />
+        </View>
+      </Sheet>
 
       <Sheet visible={confirm} onClose={() => setConfirm(false)}>
         <Text style={styles.sheetTitle}>Apagar todos os dados?</Text>

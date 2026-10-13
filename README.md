@@ -1,56 +1,46 @@
-# Welcome to your Expo app 👋
+# FocaAI
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+App de estudos para o ENEM e vestibulares (Expo + Expo Router). A API fica no repo
+[focaai-api](https://github.com/brunotaveiradasilva/focaai-api).
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Rodando
 
 ```bash
-npm run reset-project
+npm install
+cp .env.example .env   # preencha a URL da API e os client IDs do Google
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+O login com Google usa código nativo (`react-native-nitro-google-signin`), então no Android e
+no iOS o app roda num **development build**, não no Expo Go:
 
-### Other setup steps
+```bash
+npx eas-cli@latest build --profile development --platform android
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Na web (`npx expo start --web`) o login usa o Google Identity Services e funciona sem build.
 
-## Learn more
+## Login com Google
 
-To learn more about developing your project with Expo, look at the following resources:
+O app entra só com a conta Google. Ele recebe o ID token do Google e troca pelos tokens da API
+(`POST /api/auth/google`); a sessão fica no Keychain/Keystore (`expo-secure-store`) no celular e no
+`localStorage` na web, e o token de acesso é renovado sozinho quando vence (`src/lib/api.ts`).
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Os client IDs vêm do Google Cloud Console (passo a passo no README da API) e entram no `.env`:
 
-## Join the community
+| Variável | Para quê |
+|---|---|
+| `EXPO_PUBLIC_API_URL` | Endereço da API (no emulador Android, o `localhost` do computador é `10.0.2.2`) |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Client "Aplicativo da Web": login na web e audiência do ID token no Android |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Client iOS; também vira o URL scheme do retorno do login (`app.config.ts`) |
 
-Join our community of developers creating universal apps.
+Sem `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, o plugin do Google não entra na config e o build de iOS
+não consegue concluir o login. Para builds com Xcode 27 (iOS 27), a biblioteca pede suporte a
+cenas do UIKit; ver a [doc dela](https://react-native-nitro-google-sign-in.github.io/docs/setup/expo).
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Comandos
+
+```bash
+npx expo lint      # lint
+npx tsc --noEmit   # typecheck
+```
