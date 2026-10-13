@@ -9,9 +9,10 @@ import { AutoImage, QuestionText } from '@/components/question-text';
 import { Chunky } from '@/components/roadmap';
 import { Sheet } from '@/components/sheet';
 import { AREA_STYLE, onColor, shade } from '@/components/subject-style';
-import { PressableScale, ProgressBar } from '@/components/ui';
+import { Loading, PressableScale, ProgressBar } from '@/components/ui';
 import { areaById } from '@/data/catalog';
-import { useApp } from '@/store/app';
+import { saveSimuladoTime, useActiveSimulado, useAnswer, useFinishSimulado } from '@/lib/queries';
+import type { Simulado } from '@/lib/types';
 import { enterStep } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -24,33 +25,41 @@ const clock = (s: number) => {
 
 // Resolver simulado: uma questão por vez, gabarito só no final, como na prova.
 export default function SimuladoScreen() {
-  const sim = useApp((s) => s.activeSimulado);
-  const answer = useApp((s) => s.answer);
-  const tick = useApp((s) => s.tickSimulado);
-  const finish = useApp((s) => s.finishSimulado);
-
-  const [i, setI] = useState(0);
-  const [seconds, setSeconds] = useState(sim?.seconds ?? 0);
-  const [map, setMap] = useState(false);
-  const [confirm, setConfirm] = useState(false);
+  const active = useActiveSimulado();
   // Set while finishing, so the "no active simulado" redirect doesn't race the result screen.
   const [leaving, setLeaving] = useState(false);
+
+  if (active.data === undefined) return <Loading error={active.isError} onRetry={() => active.refetch()} />;
+  if (!active.data) return leaving ? null : <Redirect href="/questoes" />;
+  return <Exam sim={active.data} onLeaving={setLeaving} />;
+}
+
+function Exam({ sim, onLeaving }: { sim: Simulado; onLeaving: (leaving: boolean) => void }) {
+  const answer = useAnswer();
+  const finish = useFinishSimulado();
+
+  const [i, setI] = useState(0);
+  const [seconds, setSeconds] = useState(sim.seconds);
+  const [map, setMap] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const secondsRef = useRef(seconds);
+  // Once finishing starts the time is already saved, and there's no simulado in progress to save it to.
+  const finishing = useRef(false);
   useEffect(() => {
     secondsRef.current = seconds;
   }, [seconds]);
 
+  // The clock runs here; the API gets the time every 10 s and when the screen closes.
   useEffect(() => {
     const id = setInterval(() => setSeconds((s) => s + 1), 1000);
-    const save = setInterval(() => tick(secondsRef.current), 10_000);
+    const save = setInterval(() => saveSimuladoTime(secondsRef.current), 10_000);
     return () => {
       clearInterval(id);
       clearInterval(save);
-      tick(secondsRef.current);
+      if (!finishing.current) saveSimuladoTime(secondsRef.current);
     };
-  }, [tick]);
-
-  if (!sim) return leaving ? null : <Redirect href="/questoes" />;
+  }, []);
 
   const q = sim.questions[i];
   const chosen = sim.answers[q.key];
@@ -60,11 +69,19 @@ export default function SimuladoScreen() {
   const extraFiles = q.files.filter((f) => !q.context.includes(f));
   const last = i === sim.questions.length - 1;
 
-  const done = () => {
-    setLeaving(true);
-    tick(secondsRef.current);
-    const id = finish();
-    if (id) router.replace({ pathname: '/resultado/[id]', params: { id } });
+  const done = async () => {
+    setError(null);
+    onLeaving(true);
+    finishing.current = true;
+    await saveSimuladoTime(secondsRef.current);
+    try {
+      const result = await finish.mutateAsync();
+      router.replace({ pathname: '/resultado/[id]', params: { id: result.id } });
+    } catch {
+      finishing.current = false;
+      onLeaving(false);
+      setError('Não deu para finalizar agora. Confira sua internet e tente de novo.');
+    }
   };
 
   return (
@@ -114,7 +131,7 @@ export default function SimuladoScreen() {
                   <PressableScale
                     key={a.letter}
                     scaleTo={0.97}
-                    onPress={() => answer(q.key, a.letter)}
+                    onPress={() => answer.mutate({ key: q.key, letter: a.letter })}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={`Alternativa ${a.letter}${a.text ? `: ${a.text}` : ''}`}
@@ -133,6 +150,7 @@ export default function SimuladoScreen() {
           </Animated.View>
         </ScrollView>
 
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         <View style={styles.footer}>
           <PressableScale scaleTo={0.9} disabled={i === 0} onPress={() => setI(i - 1)} style={[styles.navBtn, i === 0 && { opacity: 0.35 }]} accessibilityLabel="Questão anterior">
             <Ionicons name="chevron-back" size={20} color={colors.text} />
@@ -213,6 +231,7 @@ export default function SimuladoScreen() {
 }
 
 const styles = StyleSheet.create({
+  error: { color: colors.danger, fontFamily: fonts.medium, fontSize: 13, textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6 },
   screen: { flex: 1, backgroundColor: colors.ink },
   column: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center' },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },

@@ -8,27 +8,27 @@ import { Chunky } from '@/components/roadmap';
 import { AREA_STYLE, onColor, shade } from '@/components/subject-style';
 import { Card, Kicker, Pill, PillRow, PressableScale, Screen, Stepper, Sub, Title } from '@/components/ui';
 import { AREAS, Area, SUBJECTS, areaById, areaOfSubject } from '@/data/catalog';
-import { formatMin } from '@/lib/coach';
-import { FIRST_YEAR, LAST_YEAR, RECENT_FROM, SNAPSHOT_YEARS, buildSimulado } from '@/lib/enem';
-import { questionTotals, scoreOf } from '@/lib/stats';
-import { useApp } from '@/store/app';
+import { formatMin } from '@/lib/format';
+import { useActiveSimulado, useDiscardSimulado, useProfile, useSimulados, useStartSimulado, useStats } from '@/lib/queries';
 import { enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
 const COUNTS = [5, 10, 20, 45, 90];
 
-// Only called from event handlers, never during render.
-const newSimuladoId = () => `${Date.now()}`;
+// Exams in the API's question bank (api.enem.dev).
+const FIRST_YEAR = 2009;
+const LAST_YEAR = 2023;
+const RECENT_FROM = 2019;
 
 // Banco de Questões — simulados sob medida com questões reais do ENEM
 export default function Questoes() {
   const params = useLocalSearchParams<{ area?: Area }>();
-  const profile = useApp((s) => s.profile)!;
-  const simulados = useApp((s) => s.simulados);
-  const checkins = useApp((s) => s.checkins);
-  const active = useApp((s) => s.activeSimulado);
-  const startSimulado = useApp((s) => s.startSimulado);
-  const discardSimulado = useApp((s) => s.discardSimulado);
+  const profile = useProfile()!;
+  const simulados = useSimulados().data ?? [];
+  const totals = useStats(7).data?.questions ?? { total: 0, correct: 0, pct: null };
+  const active = useActiveSimulado().data;
+  const startSimulado = useStartSimulado();
+  const discardSimulado = useDiscardSimulado();
 
   const [areas, setAreas] = useState<Area[]>(params.area ? [params.area] : AREAS.map((a) => a.id));
   const [count, setCount] = useState(params.area ? 10 : 20);
@@ -47,27 +47,14 @@ export default function Questoes() {
     }
   }
 
-  const totals = questionTotals(checkins, simulados);
   const weakAreas = [...new Set(SUBJECTS.filter((s) => profile.levels[s.id] === 1).map((s) => areaOfSubject(s.id)))];
 
+  // The API picks the questions (avoiding ones already seen) and may need a few seconds to fetch an exam.
   const generate = async (cfgAreas: Area[], n: number) => {
     setError(null);
     setLoading('Separando questões…');
     try {
-      const seen = new Set(simulados.flatMap((s) => s.questions.map((q) => q.key)));
-      const questions = await buildSimulado(
-        { areas: cfgAreas, count: n, range, lang: profile.language, seen },
-        (msg) => setLoading(msg),
-      );
-      if (!questions.length) throw new Error('empty');
-      startSimulado({
-        id: newSimuladoId(),
-        createdAt: new Date().toISOString(),
-        areas: cfgAreas,
-        questions,
-        answers: {},
-        seconds: 0,
-      });
+      await startSimulado.mutateAsync({ areas: cfgAreas, count: n, range });
       router.push('/simulado');
     } catch {
       setError('Não foi possível baixar as questões. Confira sua internet e tente de novo.');
@@ -84,9 +71,8 @@ export default function Questoes() {
       <Kicker>Banco de Questões</Kicker>
       <Title>Questões reais do ENEM</Title>
       <Sub>
-        {SNAPSHOT_YEARS
-          ? `Versão de teste: questões sem figura das provas de ${SNAPSHOT_YEARS[0]} a ${SNAPSHOT_YEARS[SNAPSHOT_YEARS.length - 1]}. No app instalado são mais de 2.700, de ${FIRST_YEAR} a ${LAST_YEAR}.`
-          : `Mais de 2.700 questões das provas de ${FIRST_YEAR} a ${LAST_YEAR}. Monte o simulado do seu jeito e veja o resultado na hora.`}
+        Mais de 2.700 questões das provas de {FIRST_YEAR} a {LAST_YEAR}. Monte o simulado do seu jeito e veja o resultado na
+        hora.
       </Sub>
 
       <View style={styles.stats}>
@@ -106,7 +92,7 @@ export default function Questoes() {
               <PressableScale scaleTo={0.95} onPress={() => router.push('/simulado')} style={styles.btn}>
                 <Text style={styles.btnText}>Continuar</Text>
               </PressableScale>
-              <PressableScale scaleTo={0.95} onPress={discardSimulado} style={[styles.btn, styles.btnGhost]}>
+              <PressableScale scaleTo={0.95} onPress={() => discardSimulado.mutate()} style={[styles.btn, styles.btnGhost]}>
                 <Text style={[styles.btnText, { color: colors.muted }]}>Descartar</Text>
               </PressableScale>
             </View>
@@ -167,13 +153,11 @@ export default function Questoes() {
       </PillRow>
       <Stepper label="Ou escolha" value={count} min={1} max={180} step={1} onChange={setCount} suffix=" questões" />
 
-      {SNAPSHOT_YEARS ? null : <Text style={styles.label}>Provas</Text>}
-      {SNAPSHOT_YEARS ? null : (
+      <Text style={styles.label}>Provas</Text>
       <PillRow>
         <Pill label={`Recentes (${RECENT_FROM}–${LAST_YEAR})`} selected={range === 'recentes'} onPress={() => setRange('recentes')} />
         <Pill label={`Todas (${FIRST_YEAR}–${LAST_YEAR})`} selected={range === 'todos'} onPress={() => setRange('todos')} />
       </PillRow>
-      )}
       <Text style={styles.hint}>
         Tempo sugerido: {formatMin(count * 3)} (cerca de 3 min por questão, como no ENEM). As questões de língua estrangeira
         seguem o seu idioma ({profile.language === 'ingles' ? 'inglês' : 'espanhol'}).
@@ -205,7 +189,7 @@ export default function Questoes() {
         <>
           <Text style={styles.section}>Seus simulados</Text>
           {simulados.map((s) => {
-            const sc = scoreOf(s);
+            const sc = s.score;
             const pct = sc.total ? Math.round((sc.correct / sc.total) * 100) : 0;
             return (
               <PressableScale

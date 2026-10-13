@@ -3,12 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { SUBJECT_ICON } from '@/components/subject-style';
-import { Card, Kicker, PressableScale, Screen, Sub, Title } from '@/components/ui';
+import { Card, Kicker, Loading, PressableScale, Screen, Sub, Title } from '@/components/ui';
 import { TIERS, TRACK_LABEL, courseById, subjectById } from '@/data/catalog';
-import { goalLabel } from '@/lib/planner';
-import { groupsFor, helpsWith, matchPeople } from '@/lib/people';
-import { streak } from '@/lib/stats';
-import { useApp } from '@/store/app';
+import { useConnect, usePeople, usePlanSummary, useProfile, useStats, useToggleGroup } from '@/lib/queries';
 import { enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -16,17 +13,17 @@ const PERIOD = ['manhã', 'tarde', 'noite'];
 
 // Pessoas — conexão com quem tem o mesmo objetivo
 export default function Pessoas() {
-  const profile = useApp((s) => s.profile)!;
-  const checkins = useApp((s) => s.checkins);
-  const simulados = useApp((s) => s.simulados);
-  const connections = useApp((s) => s.connections);
-  const groups = useApp((s) => s.groups);
-  const connect = useApp((s) => s.connect);
-  const toggleGroup = useApp((s) => s.toggleGroup);
+  const profile = useProfile()!;
+  const people = usePeople();
+  const goal = usePlanSummary().data?.goalLabel ?? '';
+  const myStreak = useStats(7).data?.streak ?? 0;
+  const connect = useConnect();
+  const toggleGroup = useToggleGroup();
+  if (!people.data) return <Loading error={people.isError} onRetry={() => people.refetch()} />;
 
-  const matches = matchPeople(profile);
+  // Matching runs in the API (still over example profiles, see the notice below).
+  const { matches, groups } = people.data;
   const course = courseById(profile.courseId);
-  const myStreak = streak(profile, checkins, simulados);
 
   return (
     <Screen>
@@ -44,7 +41,7 @@ export default function Pessoas() {
       <Card style={{ gap: 6 }}>
         <Text style={styles.cardKicker}>SEU CARTÃO DE ESTUDO</Text>
         <Text style={styles.cardTitle}>{profile.name}</Text>
-        <Text style={styles.muted}>{goalLabel(profile)}</Text>
+        <Text style={styles.muted}>{goal}</Text>
         <View style={styles.chips}>
           <Chip icon="trophy-outline" label={`Concorrência ${TIERS[course.tier].label.toLowerCase()}`} />
           <Chip icon="flame-outline" label={`${myStreak} dias seguidos`} />
@@ -53,8 +50,8 @@ export default function Pessoas() {
 
       <Text style={styles.section}>Sugestões para você</Text>
       {matches.map((m, i) => {
-        const state = connections[m.person.id];
-        const help = helpsWith(profile, m.person);
+        const state = m.connection;
+        const help = m.helpsWith;
         return (
           <Animated.View key={m.person.id} entering={enterUp(Math.min(i, 6) * 40)}>
             <Card style={{ gap: 8 }}>
@@ -88,7 +85,7 @@ export default function Pessoas() {
               <PressableScale
                 scaleTo={0.95}
                 disabled={!!state}
-                onPress={() => connect(m.person.id)}
+                onPress={() => connect.mutate(m.person.id)}
                 style={[styles.connect, state && styles.connectDone]}>
                 <Ionicons name={state ? 'hourglass-outline' : 'person-add'} size={15} color={state ? colors.muted : colors.accentText} />
                 <Text style={[styles.connectText, state && { color: colors.muted }]}>
@@ -101,15 +98,15 @@ export default function Pessoas() {
       })}
 
       <Text style={styles.section}>Grupos de estudo</Text>
-      {groupsFor(profile).map((g) => {
-        const joined = groups.includes(g.id);
+      {groups.map((g) => {
+        const joined = g.joined;
         return (
           <Card key={g.id} style={styles.group}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.cardTitle}>{g.name}</Text>
               <Text style={styles.muted}>{g.desc}</Text>
             </View>
-            <PressableScale scaleTo={0.92} onPress={() => toggleGroup(g.id)} style={[styles.join, joined && styles.joined]}>
+            <PressableScale scaleTo={0.92} onPress={() => toggleGroup.mutate({ groupId: g.id, join: !joined })} style={[styles.join, joined && styles.joined]}>
               <Text style={[styles.joinText, joined && { color: colors.accent }]}>{joined ? 'Participando' : 'Entrar'}</Text>
             </PressableScale>
           </Card>

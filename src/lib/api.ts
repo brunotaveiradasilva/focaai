@@ -167,6 +167,22 @@ export async function signInWithGoogle(idToken: string): Promise<ApiUser> {
   return login.user;
 }
 
+/**
+ * Local API only (`./mvnw spring-boot:test-run` in focaai-api): signs in without Google, to use the
+ * app before the OAuth client IDs exist. The endpoint doesn't exist in a published API.
+ */
+export const devSignInEnabled = __DEV__ && process.env.EXPO_PUBLIC_DEV_LOGIN === '1';
+
+export async function signInForDevelopment(): Promise<ApiUser> {
+  const login = await api<LoginResponse>('/api/auth/dev', {
+    method: 'POST',
+    body: { email: 'aluno.teste@example.com', name: 'Aluno Teste' },
+    auth: false,
+  });
+  await keep(login);
+  return login.user;
+}
+
 export async function signOut() {
   const token = session?.tokens.refreshToken;
   await clearSession();

@@ -2,7 +2,8 @@ import { create } from 'zustand';
 
 import * as account from '@/lib/api';
 import { signOutOfGoogle } from '@/lib/google-sign-in';
-import { useApp } from '@/store/app';
+import { clearLegacyState } from '@/lib/legacy';
+import { queryClient } from '@/lib/queries';
 
 type SessionState = {
   // 'loading' until the session saved on the device has been read.
@@ -10,9 +11,13 @@ type SessionState = {
   user: account.ApiUser | null;
   restore: () => Promise<void>;
   signIn: (googleIdToken: string) => Promise<void>;
+  signInDev: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 };
+
+// Nothing from the previous account stays in memory for the next one.
+const signedOut = { status: 'signedOut' as const, user: null };
 
 export const useSession = create<SessionState>()((set) => ({
   status: 'loading',
@@ -28,19 +33,29 @@ export const useSession = create<SessionState>()((set) => ({
     set({ status: 'signedIn', user });
   },
 
+  signInDev: async () => {
+    const user = await account.signInForDevelopment();
+    set({ status: 'signedIn', user });
+  },
+
   signOut: async () => {
     await account.signOut();
     await signOutOfGoogle();
-    set({ status: 'signedOut', user: null });
+    queryClient.clear();
+    set(signedOut);
   },
 
-  // Removes the account and everything in it on the server, and this device's copy too.
+  // Removes the account and everything in it on the server, and this device's old copy too.
   deleteAccount: async () => {
     await account.deleteAccount();
     await signOutOfGoogle();
-    useApp.getState().reset();
-    set({ status: 'signedOut', user: null });
+    await clearLegacyState();
+    queryClient.clear();
+    set(signedOut);
   },
 }));
 
-account.onSessionExpired(() => useSession.setState({ status: 'signedOut', user: null }));
+account.onSessionExpired(() => {
+  queryClient.clear();
+  useSession.setState(signedOut);
+});

@@ -4,7 +4,8 @@ import { Tabs } from 'expo-router/js-tabs';
 import { ComponentProps } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useApp } from '@/store/app';
+import { Loading } from '@/components/ui';
+import { useStudentState } from '@/lib/queries';
 import { colors, fonts } from '@/theme/tokens';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -18,9 +19,12 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
 ];
 
 export default function TabsLayout() {
-  const profile = useApp((s) => s.profile);
+  const state = useStudentState();
   const insets = useSafeAreaInsets();
-  if (!profile) return <Redirect href="/" />;
+  // Opened straight on a tab (reload, link): wait for the state instead of bouncing to the start.
+  if (!state.data) return <Loading error={state.isError} onRetry={() => state.refetch()} />;
+  // No profile yet: the welcome screen sends the student to the onboarding.
+  if (!state.data.profile) return <Redirect href="/" />;
 
   return (
     <Tabs

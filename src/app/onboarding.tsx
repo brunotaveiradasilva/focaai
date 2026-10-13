@@ -20,10 +20,11 @@ import {
   courseById,
   subjectById,
 } from '@/data/catalog';
-import { formatMin } from '@/lib/coach';
-import { DAYS, DAY_LETTERS, PERIODS, upcomingExamDates, weekPlan, weeklyMinutes } from '@/lib/planner';
-import { DEFAULT_ROUTINE, Routine, freeMinutes } from '@/lib/routine';
-import { Level, Obstacle, Profile, Stage, useApp } from '@/store/app';
+import { DAYS, DAY_LETTERS, PERIODS, fromKey } from '@/lib/calendar';
+import { formatMin } from '@/lib/format';
+import { usePlanPreview, useSaveProfile } from '@/lib/queries';
+import { DEFAULT_ROUTINE, MIN_FREE, Routine } from '@/lib/routine';
+import type { ExamDate, Level, Obstacle, PlanPreview, Profile, Stage } from '@/lib/types';
 import { enterStep } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -66,14 +67,13 @@ const OBSTACLES: { id: Obstacle; label: string; icon: IconName }[] = [
 
 const DAILY = [60, 120, 180, 240, 300];
 const SESSIONS = [50, 90, 120];
-// Same threshold the planner uses to put a block in a period.
-const MIN_FREE = 30;
 const TIER_ORDER: Tier[] = ['muito-alta', 'alta', 'media', 'moderada'];
 
 const shortDate = (d: Date) => d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 
 export default function Onboarding() {
-  const completeOnboarding = useApp((s) => s.completeOnboarding);
+  const saveProfile = useSaveProfile();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [track, setTrack] = useState<ExamTrack>('ambos');
@@ -114,18 +114,26 @@ export default function Onboarding() {
     [name, track, cycle, needsVest, vestibulares, courseId, stage, firstAttempt, language, levels, week, minutesPerDay, sessionMin, routine, obstacles],
   );
 
-  // Marked periods the fixed week still leaves room in.
-  const freeBlocks = week.filter((on, i) => on && freeMinutes(routine, i % 7, Math.floor(i / 7)) >= MIN_FREE).length;
+  // The API works out the plan this draft would get: free time per period, weekly minutes, exams.
+  const preview = usePlanPreview(draft).data;
+  const freeOf = (day: number, period: number) => preview?.free?.[day]?.[period] ?? null;
+  // Marked periods the fixed week still leaves room in (all marked ones until the API answers).
+  const freeBlocks = week.filter((on, i) => on && (freeOf(i % 7, Math.floor(i / 7)) ?? MIN_FREE) >= MIN_FREE).length;
   const canNext =
     (step !== 0 || name.trim().length > 0) &&
     (step !== 1 || !needsVest || vestibulares.length > 0) &&
     (step !== 2 || !!courseId) &&
     (step !== 6 || freeBlocks > 0);
 
-  const next = () => {
+  const next = async () => {
     if (step < TOTAL - 1) return setStep(step + 1);
-    completeOnboarding({ ...draft, createdAt: new Date().toISOString() });
-    router.replace('/hoje');
+    setSaveError(null);
+    try {
+      await saveProfile.mutateAsync({ ...draft, createdAt: new Date().toISOString() });
+      router.replace('/hoje');
+    } catch {
+      setSaveError('Não deu para salvar agora. Confira sua internet e tente de novo.');
+    }
   };
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
@@ -134,7 +142,11 @@ export default function Onboarding() {
       footer={
         <>
           <Button label="Voltar" variant="ghost" onPress={() => (step === 0 ? router.back() : setStep(step - 1))} />
-          <Button label={step === TOTAL - 1 ? 'Começar meus estudos' : 'Continuar'} onPress={next} disabled={!canNext} />
+          <Button
+            label={step === TOTAL - 1 ? 'Começar meus estudos' : 'Continuar'}
+            onPress={next}
+            disabled={!canNext || saveProfile.isPending}
+          />
         </>
       }>
       <Dots total={TOTAL} current={step} />
@@ -193,7 +205,7 @@ export default function Onboarding() {
                 <Text style={styles.hint}>O seu não está na lista? Marque o mais parecido: o plano de estudo funciona igual.</Text>
               </>
             ) : null}
-            <ExamPreview profile={draft} />
+            <ExamPreview profile={draft} dates={preview?.summary.examDates ?? []} />
           </>
         )}
 
@@ -289,7 +301,7 @@ export default function Onboarding() {
               Cadastre escola, trabalho, inglês, esporte, hobbies e tudo que se repete. Assim você escolhe os horários de estudo
               já sabendo o que sobra. Dá para mudar depois no Perfil.
             </Sub>
-            <RoutineEditor value={routine} onChange={setRoutine} />
+            <RoutineEditor value={routine} onChange={setRoutine} free={preview?.free} />
           </>
         )}
 
@@ -312,15 +324,15 @@ export default function Onboarding() {
                   <Text style={styles.gridLbl}>{p}</Text>
                   {DAYS.map((_, day) => {
                     const idx = period * 7 + day;
-                    const free = freeMinutes(routine, day, period);
-                    const busy = free < MIN_FREE;
+                    const free = freeOf(day, period);
+                    const busy = free !== null && free < MIN_FREE;
                     const on = week[idx] && !busy;
                     return (
                       <PressableScale
                         key={day}
                         scaleTo={0.85}
                         disabled={busy}
-                        accessibilityLabel={`${DAYS[day]} ${p}: ${busy ? 'ocupado' : `${formatMin(free)} livre`}`}
+                        accessibilityLabel={`${DAYS[day]} ${p}: ${busy ? 'ocupado' : free === null ? 'livre' : `${formatMin(free)} livre`}`}
                         accessibilityState={{ selected: on, disabled: busy }}
                         onPress={() => setWeek((w) => w.map((v, i) => (i === idx ? !v : v)))}
                         style={[styles.cell, on && styles.cellOn, busy && styles.cellBusy]}>
@@ -329,7 +341,7 @@ export default function Onboarding() {
                         ) : (
                           <>
                             {on ? <Ionicons name="checkmark" size={13} color={colors.accent} /> : null}
-                            <Text style={[styles.cellFree, on && { color: colors.accent }]}>{formatMin(free)}</Text>
+                            <Text style={[styles.cellFree, on && { color: colors.accent }]}>{free === null ? '…' : formatMin(free)}</Text>
                           </>
                         )}
                       </PressableScale>
@@ -353,7 +365,9 @@ export default function Onboarding() {
             <Text style={styles.hint}>
               {freeBlocks === 0
                 ? 'Marque pelo menos um horário livre.'
-                : `${formatMin(weeklyMinutes(draft))} de estudo por semana.`}
+                : preview
+                  ? `${formatMin(preview.summary.weeklyMinutes)} de estudo por semana.`
+                  : 'Calculando o seu plano…'}
             </Text>
           </>
         )}
@@ -377,7 +391,8 @@ export default function Onboarding() {
           </>
         )}
 
-        {step === 8 && <PlanSummary profile={draft} />}
+        {step === 8 && <PlanSummary profile={draft} preview={preview} />}
+        {saveError ? <Text style={[styles.hint, { color: colors.danger, marginTop: 10 }]}>{saveError}</Text> : null}
       </Animated.View>
     </Screen>
   );
@@ -421,8 +436,8 @@ function CheckRow({ label, hint, icon, checked, onPress }: { label: string; hint
   );
 }
 
-function ExamPreview({ profile }: { profile: Profile }) {
-  const dates = upcomingExamDates(profile);
+function ExamPreview({ profile, dates: upcoming }: { profile: Profile; dates: ExamDate[] }) {
+  const dates = upcoming.map((d) => ({ exam: { id: d.examId, name: d.examName }, phase: d.phase, date: fromKey(d.date) }));
   if (profile.cycle !== CYCLES[0]) {
     return (
       <Card style={{ marginTop: 12 }}>
@@ -449,8 +464,8 @@ function ExamPreview({ profile }: { profile: Profile }) {
   );
 }
 
-function PlanSummary({ profile }: { profile: Profile }) {
-  const tasks = weekPlan(profile, {}, {}, {}, new Date());
+function PlanSummary({ profile, preview }: { profile: Profile; preview: PlanPreview | undefined }) {
+  const tasks = preview?.tasks ?? [];
   const course = courseById(profile.courseId);
   const tier = TIERS[course.tier];
   const weak = SUBJECTS.filter((s) => profile.levels[s.id] === 1);
@@ -461,7 +476,7 @@ function PlanSummary({ profile }: { profile: Profile }) {
       <Title>Sua preparação está montada</Title>
       <Sub>Feita com a sua rotina, a concorrência de {course.name} e o seu nível em cada matéria.</Sub>
       <View style={styles.stats}>
-        <Stat value={formatMin(weeklyMinutes(profile))} label="por semana" />
+        <Stat value={preview ? formatMin(preview.summary.weeklyMinutes) : '…'} label="por semana" />
         <Stat value={String(tasks.length)} label="blocos na semana" />
         <Stat value={`${tier.simuladosPerMonth}`} label="simulados por mês" />
         <Stat value={`${tier.redacoesPerWeek}`} label={tier.redacoesPerWeek === 1 ? 'redação por semana' : 'redações por semana'} />

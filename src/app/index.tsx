@@ -4,7 +4,9 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { GoogleButton } from '@/components/google-button';
 import { LogoBadge, Wordmark } from '@/components/logo';
-import { Screen } from '@/components/ui';
+import { Button, Screen } from '@/components/ui';
+import { devSignInEnabled } from '@/lib/api';
+import { useStudentState } from '@/lib/queries';
 import { useApp } from '@/store/app';
 import { useSession } from '@/store/session';
 import { colors, fonts } from '@/theme/tokens';
@@ -13,21 +15,17 @@ import { colors, fonts } from '@/theme/tokens';
 export default function Welcome() {
   const status = useSession((s) => s.status);
   const signIn = useSession((s) => s.signIn);
-  const profile = useApp((s) => s.profile);
-  const routineSkipped = useApp((s) => s.routineSkipped);
+  const signInDev = useSession((s) => s.signInDev);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (status === 'signedIn') {
-    if (!profile) return <Redirect href="/onboarding" />;
-    return <Redirect href={profile.routine || routineSkipped ? '/hoje' : '/semana'} />;
-  }
+  if (status === 'signedIn') return <AfterSignIn />;
 
-  const enter = async (idToken: string) => {
+  const enter = async (signInWith: () => Promise<void>) => {
     setError(null);
     setBusy(true);
     try {
-      await signIn(idToken);
+      await signInWith();
     } catch {
       setError('Não deu para entrar agora. Confira sua internet e tente de novo.');
     } finally {
@@ -44,8 +42,14 @@ export default function Welcome() {
           {busy ? (
             <ActivityIndicator color={colors.accent} />
           ) : (
-            <GoogleButton onIdToken={enter} onError={() => setError('O login com Google não foi concluído.')} />
+            <GoogleButton
+              onIdToken={(idToken) => enter(() => signIn(idToken))}
+              onError={() => setError('O login com Google não foi concluído.')}
+            />
           )}
+          {devSignInEnabled && !busy ? (
+            <Button label="Entrar como aluno de teste (API local)" variant="ghost" style={{ alignSelf: 'stretch' }} onPress={() => enter(signInDev)} />
+          ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Text style={styles.note}>Entre com sua conta Google para guardar seu plano e seu progresso.</Text>
         </View>
@@ -63,6 +67,33 @@ export default function Welcome() {
           </Text>
         ))}
       </View>
+    </Screen>
+  );
+}
+
+// Signed in: the account's state decides between the onboarding and the app. The first time on a
+// device that already had the app, this is also when its old data is brought into the account.
+function AfterSignIn() {
+  const state = useStudentState();
+  const routineSkipped = useApp((s) => s.routineSkipped);
+  const signOut = useSession((s) => s.signOut);
+
+  if (state.data) {
+    const profile = state.data.profile;
+    if (!profile) return <Redirect href="/onboarding" />;
+    return <Redirect href={profile.routine || routineSkipped ? '/hoje' : '/semana'} />;
+  }
+  return (
+    <Screen scroll={false} contentStyle={styles.center}>
+      {state.isError ? (
+        <View style={{ gap: 12, alignSelf: 'stretch' }}>
+          <Text style={styles.tagline}>Não deu para carregar seus dados. Confira sua internet.</Text>
+          <Button label="Tentar de novo" onPress={() => state.refetch()} />
+          <Button label="Sair da conta" variant="ghost" onPress={() => signOut()} />
+        </View>
+      ) : (
+        <ActivityIndicator color={colors.accent} />
+      )}
     </Screen>
   );
 }

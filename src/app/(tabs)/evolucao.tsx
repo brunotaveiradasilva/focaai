@@ -5,34 +5,33 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AREA_STYLE, IconName, SUBJECT_ICON } from '@/components/subject-style';
-import { Card, Kicker, Pill, PillRow, PressableScale, ProgressBar, Screen, Sub, Title } from '@/components/ui';
-import { SUBJECTS, roadmap } from '@/data/catalog';
-import { formatMin } from '@/lib/coach';
-import { DAY_LETTERS, addDays, dateKey, examIdsOf, weekdayIndex } from '@/lib/planner';
-import { areaAccuracy, bestStreak, lastDays, minutesBySubject, questionTotals, streak } from '@/lib/stats';
-import { useApp } from '@/store/app';
+import { Card, Kicker, Loading, Pill, PillRow, PressableScale, ProgressBar, Screen, Sub, Title } from '@/components/ui';
+import { SUBJECTS, areaById } from '@/data/catalog';
+import { DAY_LETTERS, fromKey, weekdayIndex } from '@/lib/calendar';
+import { formatMin } from '@/lib/format';
+import { useProfile, useStats } from '@/lib/queries';
 import { enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
 // Evolução — progresso real, a partir dos check-ins e simulados
 export default function Evolucao() {
-  const profile = useApp((s) => s.profile)!;
-  const checkins = useApp((s) => s.checkins);
-  const simulados = useApp((s) => s.simulados);
-  const progress = useApp((s) => s.progress);
+  const profile = useProfile()!;
   const [range, setRange] = useState<7 | 30>(7);
+  const stats = useStats(range);
+  if (!stats.data) return <Loading error={stats.isError} onRetry={() => stats.refetch()} />;
 
-  const today = new Date();
-  const days = lastDays(checkins, range, today);
+  // Everything below is computed by the API from the check-ins and simulados.
+  const s = stats.data;
+  const days = s.days.map((d) => ({ key: d.date, date: fromKey(d.date), minutes: d.minutes }));
   const total = days.reduce((a, d) => a + d.minutes, 0);
   const maxDay = Math.max(60, ...days.map((d) => d.minutes));
-  const current = streak(profile, checkins, simulados, today);
-  const best = Math.max(current, bestStreak(profile, checkins, simulados));
-  const q = questionTotals(checkins, simulados);
-  const areas = areaAccuracy(simulados);
-  const bySubject = minutesBySubject(checkins, dateKey(addDays(today, -range + 1)));
+  const current = s.streak;
+  const best = s.bestStreak;
+  const q = s.questions;
+  const areas = s.areas.map((a) => ({ ...a, area: areaById(a.area) }));
+  const bySubject = s.minutesBySubject;
   const maxSubject = Math.max(1, ...Object.values(bySubject).map((v) => v ?? 0));
-  const empty = !checkins.length && !simulados.length;
+  const empty = !s.checkins && !s.simulados;
 
   // Plain-language insights from the numbers.
   const insights: { icon: IconName; text: string }[] = [];
@@ -83,7 +82,7 @@ export default function Evolucao() {
         <Tile icon="time" color={colors.accent} value={formatMin(total)} label={`estudados em ${range} dias`} />
         <Tile icon="flame" color={colors.gold} value={`${current}`} label={`dias seguidos · recorde ${best}`} />
         <Tile icon="checkmark-circle" color="#5BD68A" value={q.pct === null ? '–' : `${Math.round(q.pct * 100)}%`} label={`acerto em ${q.total} questões`} />
-        <Tile icon="document-text" color={colors.purple} value={`${simulados.length}`} label="simulados feitos" />
+        <Tile icon="document-text" color={colors.purple} value={`${s.simulados}`} label="simulados feitos" />
       </View>
 
       <Animated.View entering={enterUp()}>
@@ -92,7 +91,7 @@ export default function Evolucao() {
           <View style={styles.chart}>
             {days.map((d, i) => {
               const h = Math.max(2, (d.minutes / maxDay) * 110);
-              const isToday = d.key === dateKey(today);
+              const isToday = d.key === s.today;
               return (
                 <View key={d.key} style={styles.barCol}>
                   {range === 7 && d.minutes ? <Text style={styles.barValue}>{formatMin(d.minutes)}</Text> : null}
@@ -163,9 +162,9 @@ export default function Evolucao() {
       <Card style={{ gap: 10 }}>
         <Text style={styles.cardTitle}>Roadmap</Text>
         {SUBJECTS.map((s) => {
-          const track = roadmap(s.id, examIdsOf(profile));
-          const done = track.reduce((a, t) => a + Math.min(t.lessons, progress[t.id] ?? 0), 0);
-          const totalL = track.reduce((a, t) => a + t.lessons, 0);
+          const r = stats.data.roadmap.find((x) => x.subject === s.id);
+          const done = r?.done ?? 0;
+          const totalL = r?.total || 1;
           return (
             <View key={s.id} style={{ gap: 4 }}>
               <View style={styles.rowHead}>
