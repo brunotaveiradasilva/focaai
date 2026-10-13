@@ -11,6 +11,8 @@ type SessionState = {
   user: account.ApiUser | null;
   restore: () => Promise<void>;
   signIn: (googleIdToken: string) => Promise<void>;
+  // E-mail and password flows (sign-up confirmation, password, reset) all end in a login.
+  signInWith: (login: () => Promise<account.ApiUser>) => Promise<void>;
   signInDev: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -30,6 +32,11 @@ export const useSession = create<SessionState>()((set) => ({
 
   signIn: async (googleIdToken) => {
     const user = await account.signInWithGoogle(googleIdToken);
+    set({ status: 'signedIn', user });
+  },
+
+  signInWith: async (login) => {
+    const user = await login();
     set({ status: 'signedIn', user });
   },
 
