@@ -118,6 +118,7 @@ function App() {
             contentStyle: { backgroundColor: colors.ink },
           }}>
           <Stack.Screen name="index" />
+          <Stack.Screen name="entrar" options={{ animation: 'slide_from_right' }} />
           {/* Everything past the welcome screen needs a signed-in account; signing out lands back on it. */}
           <Stack.Protected guard={signedIn}>
             <Stack.Screen name="onboarding" />

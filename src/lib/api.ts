@@ -167,6 +167,38 @@ export async function signInWithGoogle(idToken: string): Promise<ApiUser> {
   return login.user;
 }
 
+// E-mail and password. The account only exists once the 6-digit code sent to the e-mail is
+// confirmed; the same e-mail on Google is the same account.
+
+/** Sends the sign-up code to the e-mail. Name and password wait on the server until it's confirmed. */
+export async function requestSignUp(email: string, name: string, password: string) {
+  await api('/api/auth/cadastro', { method: 'POST', body: { email, name, password }, auth: false });
+}
+
+export async function confirmSignUp(email: string, code: string): Promise<ApiUser> {
+  return enterWith('/api/auth/cadastro/confirmar', { email, code });
+}
+
+export async function signInWithPassword(email: string, password: string): Promise<ApiUser> {
+  return enterWith('/api/auth/entrar', { email, password });
+}
+
+/** Always succeeds whether the account exists or not: the server doesn't reveal who has one. */
+export async function requestPasswordReset(email: string) {
+  await api('/api/auth/senha/esqueci', { method: 'POST', body: { email }, auth: false });
+}
+
+/** Sets the new password, signs out every other device and signs in on this one. */
+export async function resetPassword(email: string, code: string, password: string): Promise<ApiUser> {
+  return enterWith('/api/auth/senha/redefinir', { email, code, password });
+}
+
+async function enterWith(path: string, body: unknown): Promise<ApiUser> {
+  const login = await api<LoginResponse>(path, { method: 'POST', body, auth: false });
+  await keep(login);
+  return login.user;
+}
+
 /**
  * Local API only (`./mvnw spring-boot:test-run` in focaai-api): signs in without Google, to use the
  * app before the OAuth client IDs exist. The endpoint doesn't exist in a published API.

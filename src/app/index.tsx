@@ -1,4 +1,4 @@
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
@@ -11,7 +11,7 @@ import { useApp } from '@/store/app';
 import { useSession } from '@/store/session';
 import { colors, fonts } from '@/theme/tokens';
 
-// Tela 1 — Boas-vindas e login com Google
+// Tela 1 — Boas-vindas e login (Google ou e-mail e senha)
 export default function Welcome() {
   const status = useSession((s) => s.status);
   const signIn = useSession((s) => s.signIn);
@@ -47,11 +47,14 @@ export default function Welcome() {
               onError={() => setError('O login com Google não foi concluído.')}
             />
           )}
+          {busy ? null : (
+            <Button label="Entrar com e-mail" variant="ghost" style={{ alignSelf: 'stretch' }} onPress={() => router.push('/entrar')} />
+          )}
           {devSignInEnabled && !busy ? (
             <Button label="Entrar como aluno de teste (API local)" variant="ghost" style={{ alignSelf: 'stretch' }} onPress={() => enter(signInDev)} />
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Text style={styles.note}>Entre com sua conta Google para guardar seu plano e seu progresso.</Text>
+          <Text style={styles.note}>Entre com o Google ou com e-mail para guardar seu plano e seu progresso.</Text>
         </View>
       }>
       <LogoBadge />
