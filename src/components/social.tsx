@@ -226,6 +226,16 @@ export function FriendButton({ user, friendship, compact }: { user: Member; frie
   );
 }
 
+/** Unread count over an icon or avatar (the bell, the profile shortcuts). Nothing when it's 0. */
+export function CountBadge({ count }: { count: number }) {
+  if (!count) return null;
+  return (
+    <View style={styles.badge} accessibilityLabel={`${count} ${count === 1 ? 'notificação nova' : 'notificações novas'}`}>
+      <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+    </View>
+  );
+}
+
 /** A member on a list (friends, requests, search), with the friendship button on the right. */
 export function MemberRow({ user, friendship }: { user: Member; friendship: Friendship }) {
   return (
@@ -288,6 +298,21 @@ const styles = StyleSheet.create({
   friendOutline: { borderWidth: 1, borderColor: colors.line, flexGrow: 1 },
   friendCompact: { flexGrow: 0, paddingVertical: 7, paddingHorizontal: 10 },
   friendText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 13 },
+  badge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.danger,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: colors.ink, fontFamily: fonts.bold, fontSize: 9 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   sheetTitle: { color: colors.text, fontFamily: fonts.title, fontSize: 20, marginBottom: 8 },
 });

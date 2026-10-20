@@ -226,3 +226,20 @@ export type Comment = { id: number; author: Member; text: string; createdAt: str
 
 /** GET /api/eu/feed and /api/usuarios/{id}/posts. `next`: pass as `antes` for the next page. */
 export type PostPage = { posts: Post[]; next: number | null };
+
+/**
+ * One line of the student's activity. `actor`: who did it (none on the reminder). `excerpt`: the
+ * start of the comment or the post.
+ */
+export type ActivityItem = {
+  id: number;
+  type: 'friend_request' | 'friend_accepted' | 'comment' | 'post' | 'simulado_reminder';
+  actor?: Member;
+  postId?: number;
+  excerpt?: string;
+  createdAt: string;
+  read: boolean;
+};
+
+/** GET /api/eu/notificacoes */
+export type ActivityFeed = { items: ActivityItem[]; unread: number };
