@@ -7,12 +7,14 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { CheckinSheet, CheckinTarget } from '@/components/checkin-sheet';
 import { IconName, SUBJECT_ICON, onColor } from '@/components/subject-style';
+import { Avatar } from '@/components/social';
 import { Card, Kicker, Loading, PressableScale, Screen } from '@/components/ui';
 import { CYCLES, subjectById } from '@/data/catalog';
 import { ACTIVITY_LABEL, DAY_LETTERS, DAY_NAMES, PERIODS, addDays, dateKey, daysBetween, fromKey, weekdayIndex } from '@/lib/calendar';
 import { formatMin } from '@/lib/format';
 import { useDismissTask, useProfile, useStats, useStudentState, useWeek } from '@/lib/queries';
 import type { ExamDate, Obstacle, Profile, Task } from '@/lib/types';
+import { useSession } from '@/store/session';
 import { enterFade, enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -43,6 +45,7 @@ export default function Hoje() {
   const week = useWeek();
   const stats = useStats(7);
   const dismissTask = useDismissTask();
+  const picture = useSession((s) => s.user?.picture);
 
   const [selected, setSelected] = useState(weekdayIndex(new Date()));
   const [checkin, setCheckin] = useState<CheckinTarget | null>(null);
@@ -83,7 +86,7 @@ export default function Hoje() {
           <Text style={styles.goal}>{summary.goalLabel}</Text>
         </View>
         <PressableScale scaleTo={0.9} onPress={() => router.push('/perfil')} accessibilityLabel="Abrir perfil" style={styles.avatar}>
-          <Text style={styles.avatarText}>{firstName[0]?.toUpperCase()}</Text>
+          {picture ? <Avatar member={{ name: firstName, picture }} size={40} /> : <Text style={styles.avatarText}>{firstName[0]?.toUpperCase()}</Text>}
         </PressableScale>
       </View>
 

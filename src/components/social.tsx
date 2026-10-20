@@ -7,8 +7,9 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-nati
 
 import { Sheet } from '@/components/sheet';
 import { Button, Card, PressableScale } from '@/components/ui';
-import { ApiError } from '@/lib/api';
+import { ApiError, imageUrl } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
+import { PickedImage, pickImage } from '@/lib/images';
 import { useCreatePost, useDeletePost, useFriendship } from '@/lib/queries';
 import type { Friendship, Member, Post } from '@/lib/types';
 import { useSession } from '@/store/session';
@@ -24,7 +25,9 @@ export function openProfile(userId: string) {
 
 export function Avatar({ member, size = 40 }: { member: Pick<Member, 'name' | 'picture'>; size?: number }) {
   const box = { width: size, height: size, borderRadius: size / 2 };
-  if (member.picture) return <Image source={member.picture} style={[box, styles.avatarBg]} contentFit="cover" accessibilityIgnoresInvertColors />;
+  if (member.picture) {
+    return <Image source={imageUrl(member.picture)} style={[box, styles.avatarBg]} contentFit="cover" accessibilityIgnoresInvertColors />;
+  }
   return (
     <View style={[box, styles.avatarBg, styles.avatarCenter]}>
       <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{member.name[0]?.toUpperCase()}</Text>
@@ -53,7 +56,15 @@ export function PostCard({ post, open = true }: { post: Post; open?: boolean }) 
           </PressableScale>
         ) : null}
       </View>
-      <Text style={styles.postText}>{post.text}</Text>
+      {post.text ? <Text style={styles.postText}>{post.text}</Text> : null}
+      {post.image ? (
+        <Image
+          source={imageUrl(post.image)}
+          style={styles.postImage}
+          contentFit={open ? 'cover' : 'contain'}
+          accessibilityLabel={`Foto de ${post.author.name}`}
+        />
+      ) : null}
       {open ? (
         <View style={styles.postFoot}>
           <Ionicons name="chatbubble-outline" size={14} color={colors.muted} />
@@ -81,11 +92,22 @@ export function PostCard({ post, open = true }: { post: Post; open?: boolean }) 
   );
 }
 
-/** Box to write a post, at the top of the feed and of the student's own profile. */
+/** Box to write a post, with an optional photo, at the top of the feed. */
 export function Composer() {
   const [text, setText] = useState('');
+  const [photo, setPhoto] = useState<PickedImage | null>(null);
+  const [picking, setPicking] = useState(false);
   const createPost = useCreatePost();
-  const ready = text.trim().length > 0 && !createPost.isPending;
+  const ready = (text.trim().length > 0 || !!photo) && !createPost.isPending;
+  const choosePhoto = async () => {
+    setPicking(true);
+    try {
+      const picked = await pickImage({ maxWidth: 1280 });
+      if (picked) setPhoto(picked);
+    } finally {
+      setPicking(false);
+    }
+  };
   return (
     <Card style={{ gap: 10 }}>
       <TextInput
@@ -97,13 +119,34 @@ export function Composer() {
         maxLength={MAX_POST}
         style={styles.composer}
       />
+      {photo ? (
+        <View>
+          <Image source={photo.uri} style={styles.postImage} contentFit="cover" accessibilityLabel="Foto escolhida" />
+          <PressableScale scaleTo={0.85} onPress={() => setPhoto(null)} accessibilityLabel="Tirar a foto" style={styles.removePhoto}>
+            <Ionicons name="close" size={16} color={colors.text} />
+          </PressableScale>
+        </View>
+      ) : null}
       {createPost.isError ? <Text style={styles.error}>{errorMessage(createPost.error)}</Text> : null}
       <View style={styles.composerFoot}>
-        <Text style={styles.meta}>{text.length > MAX_POST - 200 ? `${MAX_POST - text.length} restantes` : ''}</Text>
+        <PressableScale scaleTo={0.85} disabled={picking || createPost.isPending} onPress={choosePhoto} accessibilityLabel="Adicionar foto" style={styles.iconBtn}>
+          {picking ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="image-outline" size={20} color={colors.accent} />}
+        </PressableScale>
+        <Text style={[styles.meta, { flex: 1 }]}>{text.length > MAX_POST - 200 ? `${MAX_POST - text.length} restantes` : ''}</Text>
         <PressableScale
           scaleTo={0.94}
           disabled={!ready}
-          onPress={() => createPost.mutate(text, { onSuccess: () => setText('') })}
+          onPress={() =>
+            createPost.mutate(
+              { text, photo: photo ?? undefined },
+              {
+                onSuccess: () => {
+                  setText('');
+                  setPhoto(null);
+                },
+              },
+            )
+          }
           style={[styles.publish, !ready && { opacity: 0.4 }]}>
           {createPost.isPending ? <ActivityIndicator size="small" color={colors.accentText} /> : <Text style={styles.publishText}>Publicar</Text>}
         </PressableScale>
@@ -223,7 +266,19 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     padding: 0,
   },
-  composerFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  composerFoot: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  postImage: { width: '100%', aspectRatio: 4 / 3, borderRadius: 12, backgroundColor: colors.surface },
+  removePhoto: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(5,8,13,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   publish: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16, minWidth: 92, alignItems: 'center' },
   publishText: { color: colors.accentText, fontFamily: fonts.semibold, fontSize: 13 },
   error: { color: colors.danger, fontFamily: fonts.body, fontSize: 12 },

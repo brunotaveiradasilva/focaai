@@ -16,6 +16,8 @@ type SessionState = {
   signInDev: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
+  // Name or photo edited on the profile.
+  updateUser: (changes: Partial<Pick<account.ApiUser, 'name' | 'picture'>>) => Promise<void>;
 };
 
 // Nothing from the previous account stays in memory for the next one.
@@ -50,6 +52,11 @@ export const useSession = create<SessionState>()((set) => ({
     await signOutOfGoogle();
     queryClient.clear();
     set(signedOut);
+  },
+
+  updateUser: async (changes) => {
+    const user = await account.updateStoredUser(changes);
+    if (user) set({ user });
   },
 
   // Removes the account and everything in it on the server, and this device's old copy too.

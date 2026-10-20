@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -11,6 +12,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, fonts } from '@/theme/tokens';
+
+const LOGO = require('@/assets/images/logo.png');
 
 // The seal badge. `animated` makes it bob and breathe, used on the loading screen.
 export function LogoBadge({ size = 88, animated = false }: { size?: number; animated?: boolean }) {
@@ -30,14 +33,36 @@ export function LogoBadge({ size = 88, animated = false }: { size?: number; anim
     transform: [{ scale: 1 + 0.18 * t.value }],
   }));
 
-  const r = size * 0.32;
+  // The artwork's own corner radius, so the glow follows its outline.
+  const r = size * 0.3;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View
         style={[StyleSheet.absoluteFill, { borderRadius: r, backgroundColor: colors.accent }, styles.glow, glow]}
       />
-      <Animated.View style={[styles.badge, { width: size, height: size, borderRadius: r }, badge]}>
-        <Text style={{ fontSize: size * 0.5 }}>🦭</Text>
+      <Animated.View style={badge}>
+        <Image source={LOGO} style={{ width: size, height: size }} accessibilityIgnoresInvertColors />
+      </Animated.View>
+    </View>
+  );
+}
+
+/** Loading indicator for content inside a screen: the logo breathing in place. */
+export function LogoSpinner({ size = 44, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
+  const reduce = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    // Reduced motion still needs a sign of life: a slow fade instead of the pulse.
+    t.set(withRepeat(withTiming(1, { duration: reduce ? 1400 : 700, easing: Easing.inOut(Easing.sin) }), -1, true));
+  }, [reduce, t]);
+  const pulse = useAnimatedStyle(() => ({
+    opacity: 0.55 + 0.45 * t.value,
+    transform: [{ scale: reduce ? 1 : 0.9 + 0.1 * t.value }],
+  }));
+  return (
+    <View style={[styles.spinner, style]} accessibilityRole="progressbar" accessibilityLabel="Carregando">
+      <Animated.View style={pulse}>
+        <Image source={LOGO} style={{ width: size, height: size }} accessibilityIgnoresInvertColors />
       </Animated.View>
     </View>
   );
@@ -84,7 +109,8 @@ function Dot({ delay }: { delay: number }) {
 export function LoadingScreen() {
   return (
     <View style={styles.loading} accessibilityLabel="Carregando o FocaAI">
-      <LogoBadge size={104} animated />
+      {/* Same width as the native splash image (app.json), so the handoff doesn't jump. */}
+      <LogoBadge size={160} animated />
       <View style={{ height: 22 }} />
       <Wordmark size={34} />
       <Dots />
@@ -93,13 +119,7 @@ export function LoadingScreen() {
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  spinner: { alignItems: 'center', justifyContent: 'center' },
   glow: { shadowColor: colors.accent, shadowOpacity: 0.9, shadowRadius: 24 },
   // Rendered before custom fonts load, so it falls back to the system face gracefully.
   brand: { fontFamily: fonts.titleBold, color: colors.text },

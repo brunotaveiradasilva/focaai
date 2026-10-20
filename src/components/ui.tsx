@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactNode } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   PressableProps,
   ScrollView,
@@ -15,6 +14,7 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LogoSpinner } from '@/components/logo';
 import { EASE_OUT, PRESS_IN_MS, PRESS_OUT_MS, softenScale } from '@/theme/motion';
 import { colors, fonts, radius } from '@/theme/tokens';
 
@@ -94,7 +94,7 @@ export function Loading({ error, onRetry }: { error?: boolean; onRetry?: () => v
           {onRetry ? <Button label="Tentar de novo" onPress={onRetry} style={{ alignSelf: 'stretch' }} /> : null}
         </>
       ) : (
-        <ActivityIndicator color={colors.accent} />
+        <LogoSpinner size={56} />
       )}
     </Screen>
   );

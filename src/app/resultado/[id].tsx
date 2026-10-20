@@ -43,7 +43,7 @@ export default function Resultado() {
     <Screen
       footer={
         <View style={{ flex: 1, flexDirection: 'row', gap: 10 }}>
-          <PressableScale scaleTo={0.95} onPress={() => router.replace('/evolucao')} style={styles.ghost}>
+          <PressableScale scaleTo={0.95} onPress={() => router.replace({ pathname: '/perfil', params: { aba: 'evolucao' } })} style={styles.ghost}>
             <Text style={styles.ghostText}>Ver evolução</Text>
           </PressableScale>
           <View style={{ flex: 1 }}>

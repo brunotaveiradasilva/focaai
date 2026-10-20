@@ -1,14 +1,33 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { create } from 'zustand';
 
 import { enterSheet } from '@/theme/motion';
 import { colors } from '@/theme/tokens';
 
+/** How many sheets are open: a sheet that shouldn't stack over another (`counted={false}`) waits for 0. */
+export const useOpenSheets = create<{ count: number }>()(() => ({ count: 0 }));
+
 // Bottom sheet that springs up over a dimmed backdrop; tapping outside closes it.
-export function Sheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  visible,
+  onClose,
+  children,
+  counted = true,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  counted?: boolean;
+}) {
   const insets = useSafeAreaInsets();
+  useEffect(() => {
+    if (!visible || !counted) return;
+    useOpenSheets.setState((s) => ({ count: s.count + 1 }));
+    return () => useOpenSheets.setState((s) => ({ count: s.count - 1 }));
+  }, [visible, counted]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose} accessibilityLabel="Fechar" />
