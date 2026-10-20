@@ -20,7 +20,7 @@ import {
   courseById,
   subjectById,
 } from '@/data/catalog';
-import { DAYS, DAY_LETTERS, PERIODS, fromKey } from '@/lib/calendar';
+import { DAYS, fromKey } from '@/lib/calendar';
 import { formatMin } from '@/lib/format';
 import { usePlanPreview, useSaveProfile } from '@/lib/queries';
 import { DEFAULT_ROUTINE, MIN_FREE, Routine } from '@/lib/routine';
@@ -28,8 +28,10 @@ import type { ExamDate, Level, Obstacle, PlanPreview, Profile, Stage } from '@/l
 import { enterStep } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
-const TOTAL = 9;
+const TOTAL = 8;
 
+// Study periods aren't asked in the onboarding: weekday nights and the weekend. Rows are
+// morning, afternoon and night, Monday to Sunday.
 const DEFAULT_WEEK = [
   false, false, false, false, false, true, false,
   false, false, false, false, false, true, true,
@@ -65,9 +67,13 @@ const OBSTACLES: { id: Obstacle; label: string; icon: IconName }[] = [
   { id: 'ansiedade', label: 'Ansiedade com a prova', icon: 'pulse-outline' },
 ];
 
-const DAILY = [60, 120, 180, 240, 300];
-const SESSIONS = [50, 90, 120];
 const TIER_ORDER: Tier[] = ['muito-alta', 'alta', 'media', 'moderada'];
+
+/** The default periods, unless the fixed week leaves none of them free: then every period it leaves free. */
+function studyWeek(preview: PlanPreview | undefined) {
+  const free = (i: number) => (preview?.free?.[i % 7]?.[Math.floor(i / 7)] ?? MIN_FREE) >= MIN_FREE;
+  return DEFAULT_WEEK.some((on, i) => on && free(i)) ? DEFAULT_WEEK : DEFAULT_WEEK.map((_, i) => free(i));
+}
 
 const shortDate = (d: Date) => d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 
@@ -86,9 +92,6 @@ export default function Onboarding() {
   const [levels, setLevels] = useState<Record<SubjectId, Level>>(
     () => Object.fromEntries(SUBJECTS.map((s) => [s.id, 2])) as Record<SubjectId, Level>,
   );
-  const [week, setWeek] = useState<boolean[]>(DEFAULT_WEEK);
-  const [minutesPerDay, setMinutesPerDay] = useState(180);
-  const [sessionMin, setSessionMin] = useState(90);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [routine, setRoutine] = useState<Routine>(DEFAULT_ROUTINE);
 
@@ -104,32 +107,28 @@ export default function Onboarding() {
       firstAttempt,
       language,
       levels,
-      week,
-      minutesPerDay,
-      sessionMin,
+      week: DEFAULT_WEEK,
+      minutesPerDay: 180,
+      sessionMin: 90,
       routine,
       obstacles,
       createdAt: new Date().toISOString(),
     }),
-    [name, track, cycle, needsVest, vestibulares, courseId, stage, firstAttempt, language, levels, week, minutesPerDay, sessionMin, routine, obstacles],
+    [name, track, cycle, needsVest, vestibulares, courseId, stage, firstAttempt, language, levels, routine, obstacles],
   );
 
   // The API works out the plan this draft would get: free time per period, weekly minutes, exams.
   const preview = usePlanPreview(draft).data;
-  const freeOf = (day: number, period: number) => preview?.free?.[day]?.[period] ?? null;
-  // Marked periods the fixed week still leaves room in (all marked ones until the API answers).
-  const freeBlocks = week.filter((on, i) => on && (freeOf(i % 7, Math.floor(i / 7)) ?? MIN_FREE) >= MIN_FREE).length;
   const canNext =
     (step !== 0 || name.trim().length > 0) &&
     (step !== 1 || !needsVest || vestibulares.length > 0) &&
-    (step !== 2 || !!courseId) &&
-    (step !== 6 || freeBlocks > 0);
+    (step !== 2 || !!courseId);
 
   const next = async () => {
     if (step < TOTAL - 1) return setStep(step + 1);
     setSaveError(null);
     try {
-      await saveProfile.mutateAsync({ ...draft, createdAt: new Date().toISOString() });
+      await saveProfile.mutateAsync({ ...draft, week: studyWeek(preview), createdAt: new Date().toISOString() });
       router.replace('/hoje');
     } catch {
       setSaveError('Não deu para salvar agora. Confira sua internet e tente de novo.');
@@ -156,7 +155,7 @@ export default function Onboarding() {
           <>
             <Kicker>Vamos montar sua preparação</Kicker>
             <Title>Como podemos te chamar?</Title>
-            <Sub>São 9 perguntas rápidas. Quanto mais sincero, mais o plano fica com a sua cara.</Sub>
+            <Sub>São 8 perguntas rápidas. Quanto mais sincero, mais o plano fica com a sua cara.</Sub>
             <TextInput
               value={name}
               onChangeText={setName}
@@ -298,81 +297,14 @@ export default function Onboarding() {
             <Kicker>{step + 1} de {TOTAL} · Semana</Kicker>
             <Title>Conte como é a sua semana</Title>
             <Sub>
-              Cadastre escola, trabalho, inglês, esporte, hobbies e tudo que se repete. Assim você escolhe os horários de estudo
-              já sabendo o que sobra. Dá para mudar depois no Perfil.
+              Cadastre escola, trabalho, inglês, esporte, hobbies e tudo que se repete. Assim o plano encaixa o estudo no tempo
+              que sobra. Dá para mudar depois em Ajustes.
             </Sub>
             <RoutineEditor value={routine} onChange={setRoutine} free={preview?.free} />
           </>
         )}
 
         {step === 6 && (
-          <>
-            <Kicker>{step + 1} de {TOTAL} · Rotina</Kicker>
-            <Title>Quando você consegue estudar?</Title>
-            <Sub>Cada horário mostra o tempo que sobra depois da sua semana. Toque nos que quer usar para estudar.</Sub>
-            <View style={styles.grid}>
-              <View style={styles.gridRow}>
-                <Text style={styles.gridLbl} />
-                {DAY_LETTERS.map((d, i) => (
-                  <Text key={i} style={styles.gridHdr}>
-                    {d}
-                  </Text>
-                ))}
-              </View>
-              {PERIODS.map((p, period) => (
-                <View key={p} style={styles.gridRow}>
-                  <Text style={styles.gridLbl}>{p}</Text>
-                  {DAYS.map((_, day) => {
-                    const idx = period * 7 + day;
-                    const free = freeOf(day, period);
-                    const busy = free !== null && free < MIN_FREE;
-                    const on = week[idx] && !busy;
-                    return (
-                      <PressableScale
-                        key={day}
-                        scaleTo={0.85}
-                        disabled={busy}
-                        accessibilityLabel={`${DAYS[day]} ${p}: ${busy ? 'ocupado' : free === null ? 'livre' : `${formatMin(free)} livre`}`}
-                        accessibilityState={{ selected: on, disabled: busy }}
-                        onPress={() => setWeek((w) => w.map((v, i) => (i === idx ? !v : v)))}
-                        style={[styles.cell, on && styles.cellOn, busy && styles.cellBusy]}>
-                        {busy ? (
-                          <Text style={styles.cellBusyText}>ocupado</Text>
-                        ) : (
-                          <>
-                            {on ? <Ionicons name="checkmark" size={13} color={colors.accent} /> : null}
-                            <Text style={[styles.cellFree, on && { color: colors.accent }]}>{free === null ? '…' : formatMin(free)}</Text>
-                          </>
-                        )}
-                      </PressableScale>
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
-            <Text style={styles.label}>Quanto tempo por dia de estudo?</Text>
-            <PillRow>
-              {DAILY.map((m) => (
-                <Pill key={m} label={m >= 300 ? '5h ou mais' : formatMin(m)} selected={minutesPerDay === m} onPress={() => setMinutesPerDay(m)} />
-              ))}
-            </PillRow>
-            <Text style={styles.label}>Duração de cada bloco de estudo</Text>
-            <PillRow>
-              {SESSIONS.map((m) => (
-                <Pill key={m} label={formatMin(m)} selected={sessionMin === m} onPress={() => setSessionMin(m)} />
-              ))}
-            </PillRow>
-            <Text style={styles.hint}>
-              {freeBlocks === 0
-                ? 'Marque pelo menos um horário livre.'
-                : preview
-                  ? `${formatMin(preview.summary.weeklyMinutes)} de estudo por semana.`
-                  : 'Calculando o seu plano…'}
-            </Text>
-          </>
-        )}
-
-        {step === 7 && (
           <>
             <Kicker>{step + 1} de {TOTAL} · Disciplina</Kicker>
             <Title>O que mais te atrapalha?</Title>
@@ -391,7 +323,7 @@ export default function Onboarding() {
           </>
         )}
 
-        {step === 8 && <PlanSummary profile={draft} preview={preview} />}
+        {step === 7 && <PlanSummary profile={draft} preview={preview} />}
         {saveError ? <Text style={[styles.hint, { color: colors.danger, marginTop: 10 }]}>{saveError}</Text> : null}
       </Animated.View>
     </Screen>
@@ -583,24 +515,6 @@ const styles = StyleSheet.create({
   segment: { flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 10, borderWidth: 1, borderColor: colors.line, padding: 2 },
   segBtn: { paddingVertical: 6, paddingHorizontal: 9, borderRadius: 8 },
   segText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 11 },
-  grid: { gap: 5, marginBottom: 16 },
-  gridRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  gridLbl: { width: 46, color: colors.muted, fontFamily: fonts.body, fontSize: 11 },
-  gridHdr: { flex: 1, textAlign: 'center', color: colors.muted, fontFamily: fonts.semibold, fontSize: 11 },
-  cell: {
-    flex: 1,
-    height: 42,
-    borderRadius: 8,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cellOn: { backgroundColor: colors.accentSoft2, borderColor: colors.accent },
-  cellBusy: { backgroundColor: colors.ink, borderStyle: 'dashed' },
-  cellBusyText: { color: colors.muted, fontFamily: fonts.medium, fontSize: 9 },
-  cellFree: { color: colors.muted, fontFamily: fonts.medium, fontSize: 10 },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   stat: {
     flexBasis: '47%',
