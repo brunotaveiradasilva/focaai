@@ -125,6 +125,10 @@ function App() {
             <Stack.Screen name="semana" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="amigos" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="usuario/[id]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen
               name="simulado"
               options={{
