@@ -305,13 +305,6 @@ export function usePeople() {
   return useQuery({ queryKey: keys.people, queryFn: () => api<PeopleScreen>('/api/eu/pessoas') });
 }
 
-export function useConnect() {
-  return useMutation({
-    mutationFn: (personId: string) => api(`/api/eu/pessoas/${personId}/conectar`, { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.people }),
-  });
-}
-
 export function useToggleGroup() {
   return useMutation({
     mutationFn: ({ groupId, join }: { groupId: string; join: boolean }) =>
