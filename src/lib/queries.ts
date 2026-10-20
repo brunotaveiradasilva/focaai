@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { PickedImage, uploadImage } from '@/lib/images';
 import { importLegacyState } from '@/lib/legacy';
 import type {
+  ActivityFeed,
   CheckinResult,
   Comment,
   Friends,
@@ -49,6 +50,8 @@ const keys = {
   post: (id: number) => ['post', id] as const,
   friends: ['amigos'] as const,
   search: (text: string) => ['busca', text] as const,
+  activity: ['notificacoes'] as const,
+  unread: ['notificacoes', 'nao-lidas'] as const,
 };
 
 /** Everything that depends on the student's study data (all but the state itself). */
@@ -359,7 +362,7 @@ export function useSearchStudents(text: string) {
 
 /** A friendship changes counts, lists and whose posts show up: refresh all of the network. */
 function refreshNetwork() {
-  for (const key of [['usuario'], keys.feed, keys.friends, ['busca']]) {
+  for (const key of [['usuario'], keys.feed, keys.friends, ['busca'], keys.activity]) {
     queryClient.invalidateQueries({ queryKey: key });
   }
   // Refetched only once the refreshed profile says they can still be seen (unfriending would get a 403).
@@ -449,5 +452,36 @@ export function useDeleteComment(postId: number) {
       queryClient.invalidateQueries({ queryKey: keys.feed });
       queryClient.invalidateQueries({ queryKey: ['posts-de'] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Atividade (notificações)
+// ---------------------------------------------------------------------------
+
+/** The latest 50: friend requests and accepts, comments, friends' posts, the simulado reminder. */
+export function useActivity() {
+  return useQuery({ queryKey: keys.activity, queryFn: () => api<ActivityFeed>('/api/eu/notificacoes') });
+}
+
+/** Just the number, for the bell and the dots. Asks again every minute and when the app comes back. */
+export function useUnreadCount() {
+  return (
+    useQuery({
+      queryKey: keys.unread,
+      queryFn: () => api<{ unread: number }>('/api/eu/notificacoes/nao-lidas'),
+      refetchInterval: 60_000,
+    }).data?.unread ?? 0
+  );
+}
+
+/**
+ * The student opened the activity. Only the count goes to zero: the list keeps showing what was
+ * new until they leave, like Instagram.
+ */
+export function useMarkActivityRead() {
+  return useMutation({
+    mutationFn: () => api('/api/eu/notificacoes/lidas', { method: 'POST' }),
+    onSuccess: () => queryClient.setQueryData(keys.unread, { unread: 0 }),
   });
 }

@@ -8,9 +8,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Evolution } from '@/components/evolution';
 import { LogoSpinner } from '@/components/logo';
-import { Avatar, FriendButton, PostCard } from '@/components/social';
+import { Avatar, CountBadge, FriendButton, PostCard } from '@/components/social';
 import { Button, Card, Loading, PressableScale, Screen } from '@/components/ui';
-import { usePublicProfile, useUserPosts } from '@/lib/queries';
+import { usePublicProfile, useUnreadCount, useUserPosts } from '@/lib/queries';
 import { colors, fonts } from '@/theme/tokens';
 
 export type ProfileTab = 'posts' | 'evolucao';
@@ -22,6 +22,7 @@ export function ProfileView({ userId, initialTab = 'posts' }: { userId: string; 
   const canSee = self || data?.friendship === 'friends';
   const posts = useUserPosts(userId, !!data && canSee);
   const [tab, setTab] = useState<ProfileTab>(initialTab);
+  const unread = useUnreadCount();
   if (!data) return <Loading error={profile.isError} onRetry={() => profile.refetch()} />;
 
   const list = posts.data?.pages.flatMap((p) => p.posts) ?? [];
@@ -42,6 +43,10 @@ export function ProfileView({ userId, initialTab = 'posts' }: { userId: string; 
         </View>
         {self ? (
           <>
+            <PressableScale scaleTo={0.85} onPress={() => router.push('/atividade')} accessibilityLabel="Atividade" style={styles.round}>
+              <Ionicons name="notifications-outline" size={19} color={colors.text} />
+              <CountBadge count={unread} />
+            </PressableScale>
             <PressableScale scaleTo={0.85} onPress={() => router.push('/amigos')} accessibilityLabel="Amigos" style={styles.round}>
               <Ionicons name="people-outline" size={19} color={colors.text} />
             </PressableScale>

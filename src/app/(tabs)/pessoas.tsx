@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { LogoSpinner } from '@/components/logo';
-import { Avatar, Composer, PostCard } from '@/components/social';
+import { Avatar, Composer, CountBadge, PostCard } from '@/components/social';
 import { Button, Card, Kicker, Pill, PillRow, PressableScale, Screen, Sub, Title } from '@/components/ui';
 import { TIERS, courseById } from '@/data/catalog';
-import { useFeed, useFriends, usePeople, usePlanSummary, useProfile, useStats, useToggleGroup } from '@/lib/queries';
+import { useFeed, useFriends, usePeople, useUnreadCount, usePlanSummary, useProfile, useStats, useToggleGroup } from '@/lib/queries';
 import { useSession } from '@/store/session';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -16,6 +16,7 @@ export default function Pessoas() {
   const [tab, setTab] = useState<'feed' | 'descobrir'>('feed');
   const user = useSession((s) => s.user);
   const requests = useFriends().data?.received.length ?? 0;
+  const unread = useUnreadCount();
 
   return (
     <Screen>
@@ -35,6 +36,7 @@ export default function Pessoas() {
         {user ? (
           <PressableScale scaleTo={0.85} onPress={() => router.push('/perfil')} accessibilityLabel="Meu perfil">
             <Avatar member={{ name: user.name ?? user.email, picture: user.picture ?? undefined }} size={38} />
+            <CountBadge count={unread} />
           </PressableScale>
         ) : null}
       </View>

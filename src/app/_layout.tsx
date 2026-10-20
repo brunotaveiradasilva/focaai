@@ -128,6 +128,7 @@ function App() {
             <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="amigos" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="atividade" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="editar-perfil" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="usuario/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right' }} />
