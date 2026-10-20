@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { LogoSpinner } from '@/components/logo';
 import { MemberRow } from '@/components/social';
 import { Card, Kicker, Loading, PressableScale, Screen, Title } from '@/components/ui';
 import { useFriends, useSearchStudents } from '@/lib/queries';
@@ -49,7 +50,7 @@ export default function Amigos() {
 
       {searching ? (
         <Section title="Resultados">
-          {!results.data ? <ActivityIndicator color={colors.accent} style={{ marginVertical: 8 }} /> : null}
+          {!results.data ? <LogoSpinner size={32} style={{ marginVertical: 8 }} /> : null}
           {results.data?.length === 0 ? <Text style={styles.empty}>Ninguém com esse nome.</Text> : null}
           {results.data?.map((r) => <MemberRow key={r.user.id} user={r.user} friendship={r.friendship} />)}
         </Section>

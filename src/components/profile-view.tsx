@@ -3,8 +3,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { LogoSpinner } from '@/components/logo';
 import { Sheet } from '@/components/sheet';
 import { Avatar, Composer, FriendButton, PostCard, errorMessage } from '@/components/social';
 import { Button, Card, Kicker, Loading, PressableScale, Screen } from '@/components/ui';
@@ -74,7 +75,7 @@ export function ProfileView({ userId }: { userId: string }) {
       {canSee ? (
         <>
           {self ? <Composer /> : null}
-          {posts.isPending ? <ActivityIndicator color={colors.accent} style={{ marginTop: 16 }} /> : null}
+          {posts.isPending ? <LogoSpinner style={{ marginTop: 16 }} /> : null}
           {posts.isError ? <Text style={styles.empty}>Não deu para carregar os posts. Confira sua internet.</Text> : null}
           {posts.isSuccess && list.length === 0 ? (
             <Text style={styles.empty}>{self ? 'Você ainda não publicou nada.' : `${data.user.name} ainda não publicou nada.`}</Text>

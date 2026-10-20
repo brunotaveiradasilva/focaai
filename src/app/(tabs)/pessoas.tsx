@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { LogoSpinner } from '@/components/logo';
 import { Avatar, Composer, PostCard } from '@/components/social';
 import { SUBJECT_ICON } from '@/components/subject-style';
 import { Button, Card, Kicker, Pill, PillRow, PressableScale, Screen, Sub, Title } from '@/components/ui';
@@ -57,7 +58,7 @@ function Feed() {
   return (
     <>
       <Composer />
-      {feed.isPending ? <ActivityIndicator color={colors.accent} style={{ marginTop: 16 }} /> : null}
+      {feed.isPending ? <LogoSpinner style={{ marginTop: 16 }} /> : null}
       {feed.isError ? <Text style={styles.empty}>Não deu para carregar o feed. Confira sua internet.</Text> : null}
       {feed.isSuccess && posts.length === 0 ? (
         <Card style={{ gap: 10, alignItems: 'center' }}>
@@ -90,7 +91,7 @@ function Discover() {
     return people.isError ? (
       <Button label="Tentar de novo" onPress={() => people.refetch()} />
     ) : (
-      <ActivityIndicator color={colors.accent} style={{ marginTop: 16 }} />
+      <LogoSpinner style={{ marginTop: 16 }} />
     );
   }
 

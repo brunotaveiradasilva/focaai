@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { LogoSpinner } from '@/components/logo';
 import { Chunky } from '@/components/roadmap';
 import { AREA_STYLE, onColor, shade } from '@/components/subject-style';
 import { Card, Kicker, Pill, PillRow, PressableScale, Screen, Stepper, Sub, Title } from '@/components/ui';
@@ -168,7 +169,7 @@ export default function Questoes() {
       <View style={{ marginTop: 14, marginBottom: 8 }}>
         {loading ? (
           <View style={styles.loading}>
-            <ActivityIndicator color={colors.accent} />
+            <LogoSpinner size={28} />
             <Text style={styles.cardText}>{loading}</Text>
           </View>
         ) : (

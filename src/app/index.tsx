@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { GoogleButton } from '@/components/google-button';
-import { LogoBadge, Wordmark } from '@/components/logo';
+import { LogoBadge, LogoSpinner, Wordmark } from '@/components/logo';
 import { Button, Screen } from '@/components/ui';
 import { devSignInEnabled } from '@/lib/api';
 import { useStudentState } from '@/lib/queries';
@@ -95,7 +95,7 @@ function AfterSignIn() {
           <Button label="Sair da conta" variant="ghost" onPress={() => signOut()} />
         </View>
       ) : (
-        <ActivityIndicator color={colors.accent} />
+        <LogoSpinner size={56} />
       )}
     </Screen>
   );
