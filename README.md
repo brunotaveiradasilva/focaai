@@ -20,6 +20,9 @@ npx eas-cli@latest build --profile development --platform android
 
 Na web (`npx expo start --web`) o login usa o Google Identity Services e funciona sem build.
 
+Fotos de perfil e dos posts usam `expo-image-picker` e `expo-image-manipulator`, que também têm
+código nativo: depois de atualizar, gere um development build novo.
+
 ## Dados
 
 O app não calcula nem guarda o estudo sozinho: perfil, plano da semana, roadmap, check-ins,

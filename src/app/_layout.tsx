@@ -10,6 +10,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { LoadingScreen } from '@/components/logo';
+import { ShareProgressSheet } from '@/components/share-progress';
 import { Button } from '@/components/ui';
 import { loadContent } from '@/data/catalog';
 import { queryClient } from '@/lib/queries';
@@ -127,6 +128,7 @@ function App() {
             <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="amigos" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="editar-perfil" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="usuario/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen
@@ -139,6 +141,8 @@ function App() {
             <Stack.Screen name="resultado/[id]" options={{ animation: 'slide_from_right' }} />
           </Stack.Protected>
         </Stack>
+        {/* Offers to post a finished roadmap topic or simulado, over whatever screen is open. */}
+        {signedIn ? <ShareProgressSheet /> : null}
       </ThemeProvider>
     </QueryClientProvider>
   );

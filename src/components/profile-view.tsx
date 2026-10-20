@@ -1,30 +1,32 @@
-// A student's profile on the network: photo, bio, counts, friendship and posts. The same screen
-// serves the student's own profile (/perfil), with the bio editor, the composer and the settings.
+// A student's profile on the network, laid out like X's: cover, photo over it, name, bio, join
+// date, counts and tabs. The student's own profile (/perfil) adds "Editar perfil", the settings and
+// the Evolução tab; anyone else's has the friendship button.
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { Evolution } from '@/components/evolution';
 import { LogoSpinner } from '@/components/logo';
-import { Sheet } from '@/components/sheet';
-import { Avatar, Composer, FriendButton, PostCard, errorMessage } from '@/components/social';
-import { Button, Card, Kicker, Loading, PressableScale, Screen } from '@/components/ui';
-import { usePublicProfile, useSetBio, useUserPosts } from '@/lib/queries';
+import { Avatar, FriendButton, PostCard } from '@/components/social';
+import { Button, Card, Loading, PressableScale, Screen } from '@/components/ui';
+import { usePublicProfile, useUserPosts } from '@/lib/queries';
 import { colors, fonts } from '@/theme/tokens';
 
-const MAX_BIO = 160;
+export type ProfileTab = 'posts' | 'evolucao';
 
-export function ProfileView({ userId }: { userId: string }) {
+export function ProfileView({ userId, initialTab = 'posts' }: { userId: string; initialTab?: ProfileTab }) {
   const profile = usePublicProfile(userId);
   const data = profile.data;
   const self = data?.friendship === 'self';
   const canSee = self || data?.friendship === 'friends';
   const posts = useUserPosts(userId, !!data && canSee);
-  const [bioDraft, setBioDraft] = useState<string | null>(null);
-  const setBio = useSetBio();
+  const [tab, setTab] = useState<ProfileTab>(initialTab);
   if (!data) return <Loading error={profile.isError} onRetry={() => profile.refetch()} />;
 
   const list = posts.data?.pages.flatMap((p) => p.posts) ?? [];
+  const shownTab = self ? tab : 'posts';
+  const joined = new Date(data.joinedAt).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   return (
     <Screen>
@@ -32,7 +34,12 @@ export function ProfileView({ userId }: { userId: string }) {
         <PressableScale scaleTo={0.85} onPress={() => router.back()} accessibilityLabel="Voltar" style={styles.round}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </PressableScale>
-        <Kicker style={{ marginBottom: 0, flex: 1 }}>Perfil</Kicker>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.topName} numberOfLines={1}>
+            {data.user.name}
+          </Text>
+          <Text style={styles.muted}>{data.posts === 1 ? '1 post' : `${data.posts} posts`}</Text>
+        </View>
         {self ? (
           <>
             <PressableScale scaleTo={0.85} onPress={() => router.push('/amigos')} accessibilityLabel="Amigos" style={styles.round}>
@@ -45,40 +52,54 @@ export function ProfileView({ userId }: { userId: string }) {
         ) : null}
       </View>
 
-      <View style={styles.head}>
-        <Avatar member={data.user} size={76} />
-        <Text style={styles.name}>{data.user.name}</Text>
-        {data.bio ? (
-          <Text style={styles.bio}>{data.bio}</Text>
-        ) : self ? (
-          <Text style={[styles.bio, { color: colors.muted }]}>Conte um pouco sobre você: curso dos sonhos, cidade, o que está estudando.</Text>
-        ) : null}
-        <View style={styles.counts}>
-          <PressableScale scaleTo={0.95} disabled={!self} onPress={() => router.push('/amigos')} style={styles.count}>
-            <Text style={styles.countValue}>{data.friends}</Text>
-            <Text style={styles.countLabel}>{data.friends === 1 ? 'amigo' : 'amigos'}</Text>
+      <View style={styles.cover} />
+      <View style={styles.avatarRow}>
+        <View style={styles.avatarRing}>
+          <Avatar member={data.user} size={84} />
+        </View>
+        {self ? (
+          <PressableScale scaleTo={0.95} onPress={() => router.push('/editar-perfil')} style={styles.editBtn}>
+            <Text style={styles.editText}>Editar perfil</Text>
           </PressableScale>
-          <View style={styles.count}>
-            <Text style={styles.countValue}>{data.posts}</Text>
-            <Text style={styles.countLabel}>{data.posts === 1 ? 'post' : 'posts'}</Text>
-          </View>
-        </View>
-        <View style={styles.actions}>
-          {self ? (
-            <Button label="Editar bio" variant="ghost" style={{ flexGrow: 1 }} onPress={() => setBioDraft(data.bio ?? '')} />
-          ) : (
+        ) : (
+          <View style={styles.friendSlot}>
             <FriendButton user={data.user} friendship={data.friendship} />
-          )}
-        </View>
+          </View>
+        )}
       </View>
 
-      {canSee ? (
+      <Text style={styles.name}>{data.user.name}</Text>
+      {data.bio ? <Text style={styles.bio}>{data.bio}</Text> : null}
+      <View style={styles.metaRow}>
+        <Ionicons name="calendar-outline" size={14} color={colors.muted} />
+        <Text style={styles.muted}>Entrou em {joined}</Text>
+      </View>
+      <View style={styles.counts}>
+        <PressableScale scaleTo={0.97} disabled={!self} onPress={() => router.push('/amigos')}>
+          <Text style={styles.muted}>
+            <Text style={styles.countValue}>{data.friends}</Text> {data.friends === 1 ? 'amigo' : 'amigos'}
+          </Text>
+        </PressableScale>
+        <Text style={styles.muted}>
+          <Text style={styles.countValue}>{data.posts}</Text> {data.posts === 1 ? 'post' : 'posts'}
+        </Text>
+      </View>
+
+      <View style={styles.tabs}>
+        <TabButton label="Posts" active={shownTab === 'posts'} onPress={() => setTab('posts')} />
+        {self ? <TabButton label="Evolução" active={shownTab === 'evolucao'} onPress={() => setTab('evolucao')} /> : null}
+      </View>
+
+      {shownTab === 'evolucao' ? (
+        <Evolution />
+      ) : canSee ? (
         <>
-          {self ? <Composer /> : null}
           {posts.isPending ? <LogoSpinner style={{ marginTop: 16 }} /> : null}
           {posts.isError ? <Text style={styles.empty}>Não deu para carregar os posts. Confira sua internet.</Text> : null}
           {posts.isSuccess && list.length === 0 ? (
-            <Text style={styles.empty}>{self ? 'Você ainda não publicou nada.' : `${data.user.name} ainda não publicou nada.`}</Text>
+            <Text style={styles.empty}>
+              {self ? 'Você ainda não publicou nada. Publique pelo feed, na aba Pessoas.' : `${data.user.name} ainda não publicou nada.`}
+            </Text>
           ) : null}
           {list.map((p) => (
             <PostCard key={p.id} post={p} />
@@ -95,59 +116,41 @@ export function ProfileView({ userId }: { userId: string }) {
           </Text>
         </Card>
       )}
-
-      <Sheet visible={bioDraft !== null} onClose={() => setBioDraft(null)}>
-        <Text style={styles.sheetTitle}>Sua bio</Text>
-        <TextInput
-          value={bioDraft ?? ''}
-          onChangeText={setBioDraft}
-          placeholder="Ex.: Quero Medicina na UFMS. Estudo de noite."
-          placeholderTextColor={colors.muted}
-          maxLength={MAX_BIO}
-          multiline
-          style={styles.input}
-        />
-        <Text style={styles.hint}>
-          {(bioDraft ?? '').length}/{MAX_BIO}
-        </Text>
-        {setBio.isError ? <Text style={styles.error}>{errorMessage(setBio.error)}</Text> : null}
-        <View style={{ gap: 10, marginTop: 12 }}>
-          <Button label="Salvar" disabled={setBio.isPending} onPress={() => setBio.mutate(bioDraft ?? '', { onSuccess: () => setBioDraft(null) })} />
-          <Button label="Cancelar" variant="ghost" style={{ flexGrow: 1 }} onPress={() => setBioDraft(null)} />
-        </View>
-      </Sheet>
     </Screen>
   );
 }
 
+function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <PressableScale scaleTo={0.97} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} style={styles.tab}>
+      <Text style={[styles.tabText, active && { color: colors.text }]}>{label}</Text>
+      <View style={[styles.tabLine, active && { backgroundColor: colors.accent }]} />
+    </PressableScale>
+  );
+}
+
 const styles = StyleSheet.create({
-  top: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   round: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
-  head: { alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 18 },
-  name: { color: colors.text, fontFamily: fonts.title, fontSize: 24, marginTop: 6, textAlign: 'center' },
-  bio: { color: colors.text, fontFamily: fonts.body, fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 360 },
-  counts: { flexDirection: 'row', gap: 28, marginTop: 8 },
-  count: { alignItems: 'center' },
-  countValue: { color: colors.text, fontFamily: fonts.title, fontSize: 20 },
-  countLabel: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
-  actions: { flexDirection: 'row', alignSelf: 'stretch', marginTop: 12 },
+  topName: { color: colors.text, fontFamily: fonts.semibold, fontSize: 16 },
+  // Edge to edge: cancels the screen's side padding.
+  cover: { height: 110, marginHorizontal: -16, backgroundColor: colors.accentDim },
+  avatarRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: -42, gap: 12 },
+  avatarRing: { borderRadius: 50, borderWidth: 4, borderColor: colors.ink, backgroundColor: colors.ink },
+  editBtn: { borderWidth: 1, borderColor: colors.line, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16, marginBottom: 4 },
+  editText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 13 },
+  friendSlot: { flexDirection: 'row', maxWidth: 230, flexShrink: 1, marginBottom: 4 },
+  name: { color: colors.text, fontFamily: fonts.title, fontSize: 22, marginTop: 10 },
+  bio: { color: colors.text, fontFamily: fonts.body, fontSize: 14, lineHeight: 20, marginTop: 6 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  muted: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
+  counts: { flexDirection: 'row', gap: 18, marginTop: 8 },
+  countValue: { color: colors.text, fontFamily: fonts.semibold },
+  tabs: { flexDirection: 'row', marginTop: 16, marginBottom: 14, marginHorizontal: -16, borderBottomWidth: 1, borderColor: colors.line },
+  tab: { flex: 1, alignItems: 'center', paddingTop: 10 },
+  tabText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 14, marginBottom: 10 },
+  tabLine: { height: 3, width: 56, borderRadius: 2, backgroundColor: 'transparent' },
   empty: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, textAlign: 'center', marginVertical: 16 },
   locked: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   lockedText: { flex: 1, color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19 },
-  sheetTitle: { color: colors.text, fontFamily: fonts.title, fontSize: 20, marginBottom: 8 },
-  input: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 80,
-    color: colors.text,
-    fontFamily: fonts.body,
-    fontSize: 14,
-    textAlignVertical: 'top',
-  },
-  hint: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, textAlign: 'right', marginTop: 6 },
-  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 12, marginTop: 6 },
 });

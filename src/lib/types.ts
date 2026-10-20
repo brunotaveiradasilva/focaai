@@ -205,14 +205,21 @@ export type Member = { id: string; name: string; picture?: string };
 /** The signed-in student's relation to someone: self, friends, request sent or received, or none. */
 export type Friendship = 'self' | 'friends' | 'sent' | 'received' | null;
 
-/** GET /api/usuarios/{id} */
-export type PublicProfile = { user: Member; bio: string | null; friends: number; posts: number; friendship: Friendship };
+/** GET /api/usuarios/{id}. `joinedAt`: when the account was created. */
+export type PublicProfile = {
+  user: Member;
+  bio: string | null;
+  friends: number;
+  posts: number;
+  friendship: Friendship;
+  joinedAt: string;
+};
 
 /** GET /api/eu/amigos */
 export type Friends = { friends: Member[]; received: Member[]; sent: Member[] };
 
-/** `mine`: written by the signed-in student, who can delete it. */
-export type Post = { id: number; author: Member; text: string; createdAt: string; comments: number; mine: boolean };
+/** `mine`: written by the signed-in student, who can delete it. `image`: the photo's path on the API. */
+export type Post = { id: number; author: Member; text: string; createdAt: string; comments: number; mine: boolean; image?: string };
 
 /** `canDelete`: the comment's or the post's author. */
 export type Comment = { id: number; author: Member; text: string; createdAt: string; canDelete: boolean };

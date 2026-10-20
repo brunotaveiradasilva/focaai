@@ -3,8 +3,9 @@
 import { QueryClient, keepPreviousData, useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import type { Area, SubjectId } from '@/data/catalog';
+import { type Area, type SubjectId, topicById } from '@/data/catalog';
 import { api } from '@/lib/api';
+import { PickedImage, uploadImage } from '@/lib/images';
 import { importLegacyState } from '@/lib/legacy';
 import type {
   CheckinResult,
@@ -25,6 +26,7 @@ import type {
   StudentState,
   Week,
 } from '@/lib/types';
+import { offerSimulado, offerTopic } from '@/store/share';
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -170,9 +172,10 @@ export function useSetTopicDone() {
   return useMutation({
     mutationFn: ({ topicId, done }: { topicId: string; done: boolean }) =>
       api<StudentState>(`/api/eu/progresso/${encodeURIComponent(topicId)}`, { method: 'PUT', body: { done } }),
-    onSuccess: (state) => {
+    onSuccess: (state, { topicId, done }) => {
       setState(state);
       refreshStudy();
+      if (done) offerTopic(topicId);
     },
   });
 }
@@ -205,9 +208,13 @@ export type NewCheckin = {
 export function useLogCheckin() {
   return useMutation({
     mutationFn: (c: NewCheckin) => api<CheckinResult>('/api/eu/checkins', { method: 'POST', body: c }),
-    onSuccess: (result) => {
+    // The topic's lessons before the check-in, to tell whether this one completed it.
+    onMutate: (c) => ({ before: c.topicId ? (queryClient.getQueryData<StudentState>(keys.state)?.progress[c.topicId] ?? 0) : 0 }),
+    onSuccess: (result, c, { before }) => {
       setState(result.state);
       refreshStudy();
+      const lessons = c.topicId ? topicById(c.topicId)?.lessons : undefined;
+      if (c.topicId && lessons && before < lessons && (result.state.progress[c.topicId] ?? 0) >= lessons) offerTopic(c.topicId);
     },
   });
 }
@@ -278,6 +285,7 @@ export function useFinishSimulado() {
       queryClient.setQueryData(keys.active, null);
       queryClient.invalidateQueries({ queryKey: keys.simulados });
       refreshStudy();
+      offerSimulado(sim.score);
     },
   });
 }
@@ -374,10 +382,25 @@ export function useFriendship() {
   });
 }
 
-export function useSetBio() {
+/**
+ * Name, bio and photo. `photo`: a new one to send first; otherwise `picture` is kept as is (or null
+ * to remove it). The name is also what the app calls the student ("Oi, …"); the screen updates the session.
+ */
+export function useEditProfile() {
   return useMutation({
-    mutationFn: (bio: string) => api<PublicProfile>('/api/eu/bio', { method: 'PUT', body: { bio } }),
-    onSuccess: (profile) => queryClient.setQueryData(keys.profileOf(profile.user.id), profile),
+    mutationFn: async ({ name, bio, picture, photo }: { name: string; bio: string; picture: string | null; photo?: PickedImage }) => {
+      const url = photo ? (await uploadImage(photo)).url : picture;
+      return api<PublicProfile>('/api/eu/perfil-publico', { method: 'PUT', body: { name, bio, picture: url } });
+    },
+    onSuccess: async (profile) => {
+      queryClient.setQueryData(keys.profileOf(profile.user.id), profile);
+      const study = queryClient.getQueryData<StudentState>(keys.state)?.profile;
+      if (study && study.name !== profile.user.name) {
+        setState(await api<StudentState>('/api/eu/perfil', { method: 'PATCH', body: { name: profile.user.name } }));
+      }
+      // The new name and photo show on their posts and comments too.
+      for (const key of [keys.feed, ['posts-de'], ['post']]) queryClient.invalidateQueries({ queryKey: key });
+    },
   });
 }
 
@@ -388,7 +411,11 @@ function refreshPosts() {
 
 export function useCreatePost() {
   return useMutation({
-    mutationFn: (text: string) => api<Post>('/api/posts', { method: 'POST', body: { text } }),
+    // The photo, if any, goes up first; the post points to it.
+    mutationFn: async ({ text, photo }: { text: string; photo?: PickedImage }) => {
+      const image = photo ? (await uploadImage(photo)).url : undefined;
+      return api<Post>('/api/posts', { method: 'POST', body: { text, image } });
+    },
     onSuccess: refreshPosts,
   });
 }

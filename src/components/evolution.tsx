@@ -5,7 +5,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AREA_STYLE, IconName, SUBJECT_ICON } from '@/components/subject-style';
-import { Card, Kicker, Loading, Pill, PillRow, PressableScale, ProgressBar, Screen, Sub, Title } from '@/components/ui';
+import { LogoSpinner } from '@/components/logo';
+import { Button, Card, Pill, PillRow, PressableScale, ProgressBar, Sub } from '@/components/ui';
 import { SUBJECTS, areaById } from '@/data/catalog';
 import { DAY_LETTERS, fromKey, weekdayIndex } from '@/lib/calendar';
 import { formatMin } from '@/lib/format';
@@ -13,12 +14,12 @@ import { useProfile, useStats } from '@/lib/queries';
 import { enterUp } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
-// Evolução — progresso real, a partir dos check-ins e simulados
-export default function Evolucao() {
+// Evolução — progresso real, a partir dos check-ins e simulados. Fica numa aba do próprio perfil.
+export function Evolution() {
   const profile = useProfile()!;
   const [range, setRange] = useState<7 | 30>(7);
   const stats = useStats(range);
-  if (!stats.data) return <Loading error={stats.isError} onRetry={() => stats.refetch()} />;
+  if (!stats.data) return stats.isError ? <Button label="Tentar de novo" onPress={() => stats.refetch()} /> : <LogoSpinner style={{ marginTop: 16 }} />;
 
   // Everything below is computed by the API from the check-ins and simulados.
   const s = stats.data;
@@ -55,9 +56,7 @@ export default function Evolucao() {
   }
 
   return (
-    <Screen>
-      <Kicker>Evolução</Kicker>
-      <Title>Seu progresso real</Title>
+    <>
       <Sub>Tudo aqui vem dos seus check-ins e simulados.</Sub>
 
       <PillRow>
@@ -177,7 +176,7 @@ export default function Evolucao() {
           );
         })}
       </Card>
-    </Screen>
+    </>
   );
 }
 

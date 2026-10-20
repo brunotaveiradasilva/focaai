@@ -7,6 +7,12 @@ export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:808
 
 export type ApiUser = { id: string; email: string; name: string | null; picture: string | null };
 
+/** Photos sent through the app come as a path on the API (`/api/imagens/...`); Google's are full URLs. */
+export function imageUrl(path: string | null | undefined) {
+  if (!path) return undefined;
+  return path.startsWith('/') ? `${API_URL}${path}` : path;
+}
+
 type Tokens = { accessToken: string; refreshToken: string; expiresAt: number };
 
 type LoginResponse = { accessToken: string; refreshToken: string; expiresIn: number; user: ApiUser };
@@ -82,6 +88,14 @@ async function keep(login: LoginResponse) {
 export async function restoreSession(): Promise<ApiUser | null> {
   session = await readStored();
   return session?.user ?? null;
+}
+
+/** Name or photo changed in the app: keeps the saved session showing the new ones. */
+export async function updateStoredUser(changes: Partial<Pick<ApiUser, 'name' | 'picture'>>): Promise<ApiUser | null> {
+  if (!session) return null;
+  session = { ...session, user: { ...session.user, ...changes } };
+  await writeStored(session);
+  return session.user;
 }
 
 export async function clearSession() {
