@@ -7,12 +7,10 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
 
-import { IconName, SUBJECT_ICON, onColor, shade } from '@/components/subject-style';
+import { SUBJECT_ICON, onColor } from '@/components/subject-style';
 import { PressableScale } from '@/components/ui';
 import { RoadTopic, Subject, isMinor } from '@/data/catalog';
 import { EASE_OUT, PRESS_OUT_MS, enterFade } from '@/theme/motion';
@@ -22,9 +20,8 @@ export type NodeState = 'done' | 'doing' | 'todo';
 
 // How far the face of a chunky button sits above its base, and sinks on press.
 const DEPTH = 6;
-const RING_PAD = 11;
 
-// Duolingo-style chunky button: a darker base sits under the face, and the face sinks into it on press.
+// Chunky button: a darker base sits under the face, and the face sinks into it on press.
 export function Chunky({
   width,
   height,
@@ -82,26 +79,56 @@ export function Chunky({
   );
 }
 
-function nodeLook(state: NodeState, subject: Subject, topic: RoadTopic, isCurrent: boolean) {
-  const icon: IconName = topic.final ? 'trophy' : isMinor(topic) ? 'star' : SUBJECT_ICON[subject.id];
-  const color = topic.final ? colors.gold : subject.color;
-  if (state === 'done') {
-    return { face: color, base: shade(color), icon: (topic.final ? 'trophy' : 'checkmark') as IconName, tint: onColor(color) };
-  }
-  if (isCurrent || state === 'doing') {
-    return { face: color, base: shade(color), icon, tint: onColor(color) };
-  }
-  // Not started yet, but open: outlined in the subject color, never greyed out.
-  return { face: colors.surface2, base: shade(color, 0.3), icon, tint: color, border: color, dashed: isMinor(topic) || !!topic.final };
-}
-
 const STATE_LABEL: Record<NodeState, string> = {
   done: 'concluído',
   doing: 'em andamento',
   todo: 'não iniciado',
 };
 
-export function PathNode({
+// Subway-map layout: a vertical line in the subject color, each topic a station beside it.
+const RAIL_W = 40;
+const LINE_W = 4;
+// Vertical center of the station dot inside a row, so line segments meet it exactly.
+const DOT_Y = 30;
+const DOT_SLOT = 28;
+
+function StationDot({ topic, subject, state, isCurrent }: { topic: RoadTopic; subject: Subject; state: NodeState; isCurrent: boolean }) {
+  const color = topic.final ? colors.gold : subject.color;
+  if (topic.final) {
+    // Terminal station: a square stop instead of a round one.
+    return (
+      <View style={[styles.terminal, { backgroundColor: state === 'done' ? color : colors.ink, borderColor: color }]}>
+        <Ionicons name="trophy" size={13} color={state === 'done' ? onColor(color) : color} />
+      </View>
+    );
+  }
+  if (isCurrent) {
+    return (
+      <>
+        <Pulse size={DOT_SLOT} color={color} />
+        <View style={[styles.dot, { width: DOT_SLOT, height: DOT_SLOT, backgroundColor: color, borderWidth: 0 }]}>
+          <Ionicons name={SUBJECT_ICON[subject.id]} size={15} color={onColor(color)} />
+        </View>
+      </>
+    );
+  }
+  const size = isMinor(topic) ? 14 : 20;
+  if (state === 'done') {
+    return (
+      <View style={[styles.dot, { width: size, height: size, backgroundColor: color, borderWidth: 0 }]}>
+        <Ionicons name="checkmark" size={size * 0.7} color={onColor(color)} />
+      </View>
+    );
+  }
+  // Open stations are outlined in the subject color, never greyed out; started ones get a filled core.
+  return (
+    <View style={[styles.dot, { width: size, height: size, borderColor: color }]}>
+      {state === 'doing' ? <View style={[styles.core, { width: size / 2.4, height: size / 2.4, backgroundColor: color }]} /> : null}
+    </View>
+  );
+}
+
+export function Station({
   topic,
   subject,
   state,
@@ -109,7 +136,10 @@ export function PathNode({
   isCurrent,
   isFocus,
   index,
-  offset,
+  topLit,
+  bottomLit,
+  first,
+  last,
   onPress,
 }: {
   topic: RoadTopic;
@@ -119,55 +149,80 @@ export function PathNode({
   isCurrent: boolean;
   isFocus: boolean;
   index: number;
-  offset: number;
+  // Whether the line segments above and below this station are lit in the subject color.
+  topLit: boolean;
+  bottomLit: boolean;
+  first: boolean;
+  last: boolean;
   onPress: () => void;
 }) {
-  const size = isMinor(topic) ? 56 : 72;
-  const ring = size + RING_PAD * 2;
-  const look = nodeLook(state, subject, topic, isCurrent);
-  const showRing = isCurrent || state === 'doing';
+  const color = topic.final ? colors.gold : subject.color;
+  const pct = topic.lessons ? Math.min(1, done / topic.lessons) : 0;
+  const kicker = isFocus ? 'SEU FOCO' : done > 0 ? 'CONTINUE DAQUI' : 'PRÓXIMA PARADA';
 
   return (
     <Animated.View
       // Only the first screenful staggers in; the rest are already in place when scrolled to.
-      entering={enterFade(Math.min(index, 6) * 35)}
-      style={[styles.nodeWrap, { left: offset, paddingTop: isCurrent ? 44 : 0 }]}>
-      <View style={{ width: ring, height: ring }}>
-        {isCurrent ? (
-          <>
-            <StartBubble label={isFocus ? 'SEU FOCO' : done > 0 ? 'CONTINUAR' : 'PRÓXIMO'} color={look.face} tint={look.tint} />
-            <Pulse size={size} color={look.face} />
-          </>
-        ) : null}
-        {showRing ? <ProgressRing size={ring} color={look.face} value={done / topic.lessons} /> : null}
-        <View style={{ position: 'absolute', top: RING_PAD, left: RING_PAD }}>
-          <Chunky
-            width={size}
-            height={size}
-            radius={size / 2}
-            face={look.face}
-            base={look.base}
-            border={look.border}
-            dashed={look.dashed}
-            onPress={onPress}
-            label={`${topic.title}, ${STATE_LABEL[state]}`}>
-            <Ionicons name={look.icon} size={size * 0.44} color={look.tint} />
-          </Chunky>
+      entering={enterFade(Math.min(index, 8) * 30)}
+      style={styles.row}>
+      <View style={styles.rail}>
+        {first ? null : <View style={[styles.seg, { top: 0, height: DOT_Y, backgroundColor: topLit ? subject.color : colors.line }]} />}
+        {last ? null : <View style={[styles.seg, { top: DOT_Y, bottom: 0, backgroundColor: bottomLit ? subject.color : colors.line }]} />}
+        <View style={styles.dotSlot}>
+          <StationDot topic={topic} subject={subject} state={state} isCurrent={isCurrent} />
         </View>
       </View>
-      <Text style={styles.nodeLabel} numberOfLines={2}>
-        {topic.title}
-      </Text>
-      {state !== 'todo' && !topic.final ? (
-        <Text style={styles.nodeMeta}>
-          {done}/{topic.lessons} aulas
-        </Text>
-      ) : null}
+      <PressableScale
+        onPress={onPress}
+        scaleTo={0.97}
+        accessibilityRole="button"
+        accessibilityLabel={`${topic.title}, ${STATE_LABEL[state]}`}
+        style={[
+          styles.card,
+          isCurrent && { borderColor: color, backgroundColor: colors.surface2, paddingVertical: 14 },
+          topic.final && !isCurrent && { borderColor: colors.goldDim, borderStyle: 'dashed' },
+        ]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          {isCurrent ? <Text style={[styles.kicker, { color }]}>{kicker}</Text> : null}
+          <Text
+            style={[styles.title, isCurrent && styles.titleCurrent, state === 'done' && !isCurrent && { color: colors.muted }]}
+            numberOfLines={2}>
+            {topic.title}
+          </Text>
+          <View style={styles.metaRow}>
+            {topic.final ? (
+              <Text style={styles.meta}>Fim da linha · simulado da área</Text>
+            ) : state === 'done' ? (
+              <Text style={styles.meta}>Concluído</Text>
+            ) : state === 'doing' || isCurrent ? (
+              <>
+                <View style={styles.track}>
+                  <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: color }]} />
+                </View>
+                <Text style={styles.meta}>
+                  {done}/{topic.lessons} aulas
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.meta}>{topic.lessons} aulas</Text>
+            )}
+            {isMinor(topic) ? <Text style={styles.tag}>peso menor</Text> : null}
+            {isFocus && !isCurrent ? <Ionicons name="flag" size={12} color={color} /> : null}
+          </View>
+        </View>
+        {isCurrent ? (
+          <View style={[styles.go, { backgroundColor: color }]}>
+            <Ionicons name="arrow-forward" size={18} color={onColor(color)} />
+          </View>
+        ) : (
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        )}
+      </PressableScale>
     </Animated.View>
   );
 }
 
-// Soft ripple behind the current node so the eye lands on it first.
+// Soft ripple behind the current station so the eye lands on it first.
 function Pulse({ size, color }: { size: number; color: string }) {
   const reduce = useReducedMotion();
   const t = useSharedValue(0);
@@ -176,70 +231,14 @@ function Pulse({ size, color }: { size: number; color: string }) {
     t.set(withRepeat(withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), -1));
   }, [reduce, t]);
   const style = useAnimatedStyle(() => ({
-    opacity: 0.22 * (1 - t.value),
-    transform: [{ scale: 1 + 0.28 * t.value }],
+    opacity: 0.3 * (1 - t.value),
+    transform: [{ scale: 1 + 0.6 * t.value }],
   }));
   return (
     <Animated.View
       pointerEvents="none"
-      style={[
-        { position: 'absolute', top: RING_PAD, left: RING_PAD, width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-        style,
-      ]}
+      style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]}
     />
-  );
-}
-
-function ProgressRing({ size, color, value }: { size: number; color: string; value: number }) {
-  const stroke = 4;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const v = Math.max(0, Math.min(1, value));
-  return (
-    <Svg width={size} height={size} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Circle cx={size / 2} cy={size / 2} r={r} stroke={colors.line} strokeWidth={stroke} fill="none" />
-      {v > 0 ? (
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={color}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${c} ${c}`}
-          strokeDashoffset={c * (1 - v)}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      ) : null}
-    </Svg>
-  );
-}
-
-// Bobbing speech bubble over the current node, like Duolingo's "START".
-function StartBubble({ label, color, tint }: { label: string; color: string; tint: string }) {
-  const reduce = useReducedMotion();
-  const y = useSharedValue(0);
-  useEffect(() => {
-    if (reduce) return;
-    y.set(
-      withRepeat(
-        withSequence(
-          withTiming(-2.5, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
-          withTiming(0, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
-        ),
-        -1,
-      ),
-    );
-  }, [reduce, y]);
-  const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
-  return (
-    <Animated.View pointerEvents="none" style={[styles.bubbleWrap, style]}>
-      <View style={[styles.bubble, { backgroundColor: color }]}>
-        <Text style={[styles.bubbleText, { color: tint }]}>{label}</Text>
-      </View>
-      <View style={[styles.bubbleTip, { borderTopColor: color }]} />
-    </Animated.View>
   );
 }
 
@@ -275,20 +274,34 @@ export function SubjectChip({
   );
 }
 
-// Divider that opens each group of topics along the path.
-export function GroupHeader({ title, done, total, color }: { title: string; done: number; total: number; color: string }) {
+// Interchange that opens each group of topics along the line.
+export function GroupHeader({
+  title,
+  done,
+  total,
+  color,
+  lit,
+  first,
+}: {
+  title: string;
+  done: number;
+  total: number;
+  color: string;
+  lit: boolean;
+  first: boolean;
+}) {
   return (
     <View style={styles.group} accessibilityRole="header">
-      <View style={styles.groupLine} />
-      <View style={styles.groupPill}>
-        <Text style={[styles.groupTitle, { color }]} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={styles.groupMeta}>
-          {done}/{total}
-        </Text>
+      <View style={styles.rail}>
+        {first ? null : <View style={[styles.seg, { top: 0, bottom: 0, backgroundColor: lit ? color : colors.line }]} />}
+        <View style={[styles.interchange, { borderColor: color }]} />
       </View>
-      <View style={styles.groupLine} />
+      <Text style={[styles.groupTitle, { color }]} numberOfLines={1}>
+        {title.toUpperCase()}
+      </Text>
+      <Text style={styles.groupMeta}>
+        {done}/{total}
+      </Text>
     </View>
   );
 }
@@ -309,9 +322,7 @@ export function UnitBanner({
   const tint = onColor(subject.color);
   const pct = total ? Math.min(1, done / total) : 0;
   return (
-    <Animated.View
-      entering={enterFade()}
-      style={[styles.banner, { backgroundColor: subject.color, borderBottomColor: shade(subject.color) }]}>
+    <Animated.View entering={enterFade()} style={[styles.banner, { backgroundColor: subject.color }]}>
       <View style={styles.bannerRow}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[styles.bannerKicker, { color: tint }]}>ROADMAP · {examName.toUpperCase()}</Text>
@@ -320,7 +331,7 @@ export function UnitBanner({
             Agora: {currentTitle}
           </Text>
         </View>
-        <View style={[styles.bannerIcon, { backgroundColor: shade(subject.color, 0.8) }]}>
+        <View style={[styles.bannerIcon, { backgroundColor: 'rgba(0,0,0,0.16)' }]}>
           <Ionicons name={SUBJECT_ICON[subject.id]} size={30} color={tint} />
         </View>
       </View>
@@ -336,28 +347,51 @@ export function UnitBanner({
 
 const styles = StyleSheet.create({
   face: { width: '100%', alignItems: 'center', justifyContent: 'center' },
-  nodeWrap: { width: 170, alignItems: 'center' },
-  nodeMeta: { color: colors.muted, fontFamily: fonts.medium, fontSize: 11, marginTop: 1 },
-  nodeLabel: {
-    color: colors.text,
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 2,
-    lineHeight: 16,
+  row: { flexDirection: 'row', alignSelf: 'stretch', minHeight: DOT_Y * 2 },
+  rail: { width: RAIL_W, alignItems: 'center' },
+  seg: { position: 'absolute', width: LINE_W, left: (RAIL_W - LINE_W) / 2 },
+  dotSlot: {
+    position: 'absolute',
+    top: DOT_Y - DOT_SLOT / 2,
+    width: RAIL_W,
+    height: DOT_SLOT,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  bubbleWrap: { position: 'absolute', bottom: '100%', left: -60, right: -60, alignItems: 'center', marginBottom: 2 },
-  bubble: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 12 },
-  bubbleText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1 },
-  bubbleTip: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 7,
-    borderRightWidth: 7,
-    borderTopWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
+  dot: { alignItems: 'center', justifyContent: 'center', borderRadius: 999, borderWidth: 3, backgroundColor: colors.ink },
+  core: { borderRadius: 999 },
+  terminal: { width: 26, height: 26, borderRadius: 7, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  card: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginVertical: 5,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
+  kicker: { fontFamily: fonts.bold, fontSize: 10, letterSpacing: 1.2, marginBottom: 3 },
+  title: { color: colors.text, fontFamily: fonts.semibold, fontSize: 14, lineHeight: 19 },
+  titleCurrent: { fontFamily: fonts.title, fontSize: 18, lineHeight: 23 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
+  meta: { color: colors.muted, fontFamily: fonts.medium, fontSize: 11 },
+  tag: {
+    color: colors.muted,
+    fontFamily: fonts.medium,
+    fontSize: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  track: { width: 56, height: 4, borderRadius: 2, backgroundColor: colors.line, overflow: 'hidden' },
+  fill: { height: 4, borderRadius: 2 },
+  go: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -371,23 +405,11 @@ const styles = StyleSheet.create({
   },
   chipIcon: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   chipText: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 13 },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', marginTop: 8 },
-  groupLine: { flex: 1, height: 1, backgroundColor: colors.line },
-  groupPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    maxWidth: '75%',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface2,
-  },
-  groupTitle: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.4 },
+  group: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 8, height: 44 },
+  interchange: { width: 24, height: 18, borderRadius: 9, borderWidth: 3, backgroundColor: colors.ink, marginTop: 13 },
+  groupTitle: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2 },
   groupMeta: { color: colors.muted, fontFamily: fonts.medium, fontSize: 11 },
-  banner: { borderRadius: 18, padding: 16, borderBottomWidth: 5, marginBottom: 8 },
+  banner: { borderRadius: 18, padding: 16, marginBottom: 8 },
   bannerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bannerKicker: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2, opacity: 0.75 },
   bannerTitle: { fontFamily: fonts.titleBold, fontSize: 26, marginTop: 2 },

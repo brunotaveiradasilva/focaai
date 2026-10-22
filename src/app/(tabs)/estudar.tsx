@@ -4,16 +4,13 @@ import { Fragment, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CheckinSheet, CheckinTarget, MaterialLinks } from '@/components/checkin-sheet';
-import { Chunky, GroupHeader, PathNode, SubjectChip, UnitBanner } from '@/components/roadmap';
+import { Chunky, GroupHeader, Station, SubjectChip, UnitBanner } from '@/components/roadmap';
 import { Sheet } from '@/components/sheet';
 import { IconName, SUBJECT_ICON, onColor, shade } from '@/components/subject-style';
 import { Loading, PressableScale, ProgressBar, Screen } from '@/components/ui';
 import { RoadTopic, SUBJECTS, SubjectId, TRACK_LABEL, VESTIBULARES, areaOfSubject, isMinor, subjectById } from '@/data/catalog';
 import { useProfile, useRoadmap, useSetFocus, useSetTopicDone } from '@/lib/queries';
 import { colors, fonts } from '@/theme/tokens';
-
-// Horizontal offsets that make the path snake left and right, Duolingo-style.
-const OFFSETS = [0, 48, 72, 48, 0, -48, -72, -48];
 
 const STATUS_LABEL = { done: 'Concluído', doing: 'Em andamento', todo: 'Não iniciado' } as const;
 
@@ -46,6 +43,8 @@ export default function Estudar() {
   const path = roadmap.data.topics;
   const current = path.find((t) => t.id === roadmap.data.current) ?? path[path.length - 1];
   const isDone = (t: (typeof path)[number]) => t.state === 'done';
+  // The line lights up between stations the student has already started.
+  const isLit = (t: (typeof path)[number] | undefined) => !!t && t.state !== 'todo';
   const content = path.filter((t) => !t.final);
   const sorted = [...SUBJECTS].sort((a, b) => Number(weak.includes(b.id)) - Number(weak.includes(a.id)));
   const groupStats = (groupId: string) => {
@@ -82,29 +81,42 @@ export default function Estudar() {
         <View style={styles.free}>
           <Ionicons name="shuffle" size={14} color={colors.muted} />
           <Text style={styles.freeText}>
-            Caminho livre: toque em qualquer assunto para estudar ou definir como seu foco. Os nós menores são
+            Caminho livre: toque em qualquer estação para estudar ou definir como seu foco. As paradas menores são
             assuntos que seu edital cita só em parte.
           </Text>
         </View>
         <View style={styles.path}>
-          {path.map((topic, i) => (
-            <Fragment key={topic.id}>
-              {topic.groupId !== path[i - 1]?.groupId ? (
-                <GroupHeader title={topic.groupName} color={subject.color} {...groupStats(topic.groupId)} />
-              ) : null}
-              <PathNode
-                topic={topic}
-                subject={subject}
-                state={topic.state}
-                done={topic.done}
-                isCurrent={topic.id === current.id}
-                isFocus={topic.focus}
-                index={i}
-                offset={OFFSETS[i % OFFSETS.length]}
-                onPress={() => setOpen(topic)}
-              />
-            </Fragment>
-          ))}
+          {path.map((topic, i) => {
+            const prev = path[i - 1];
+            const next = path[i + 1];
+            return (
+              <Fragment key={topic.id}>
+                {topic.groupId !== prev?.groupId ? (
+                  <GroupHeader
+                    title={topic.groupName}
+                    color={subject.color}
+                    lit={isLit(prev) && isLit(topic)}
+                    first={i === 0}
+                    {...groupStats(topic.groupId)}
+                  />
+                ) : null}
+                <Station
+                  topic={topic}
+                  subject={subject}
+                  state={topic.state}
+                  done={topic.done}
+                  isCurrent={topic.id === current.id}
+                  isFocus={topic.focus}
+                  index={i}
+                  topLit={isLit(prev) && isLit(topic)}
+                  bottomLit={isLit(topic) && isLit(next)}
+                  first={false}
+                  last={!next}
+                  onPress={() => setOpen(topic)}
+                />
+              </Fragment>
+            );
+          })}
         </View>
       </View>
 
@@ -206,7 +218,7 @@ const styles = StyleSheet.create({
   chips: { marginBottom: 14, flexGrow: 0 },
   free: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 6, paddingHorizontal: 2 },
   freeText: { flex: 1, color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 17 },
-  path: { alignItems: 'center', gap: 22, paddingTop: 28, paddingBottom: 24 },
+  path: { paddingTop: 12, paddingBottom: 24 },
   meta: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, marginTop: 6 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10 },
   sheetIcon: {
