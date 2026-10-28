@@ -24,6 +24,7 @@ import { formatMin } from '@/lib/format';
 import { usePlanPreview, useSaveProfile } from '@/lib/queries';
 import { DEFAULT_ROUTINE, MIN_FREE, Routine } from '@/lib/routine';
 import type { ExamDate, Level, Obstacle, PlanPreview, Profile, Stage } from '@/lib/types';
+import { useSession } from '@/store/session';
 import { enterStep } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
@@ -98,7 +99,8 @@ export default function Onboarding() {
   const saveProfile = useSaveProfile();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
-  const [name, setName] = useState('');
+  // Starts with the account's name (typed at sign-up or from Google); the student can still change it.
+  const [name, setName] = useState(() => useSession.getState().user?.name ?? '');
   const [track, setTrack] = useState<ExamTrack>('ambos');
   const [cycle, setCycle] = useState(CYCLES[0]);
   const [vestibulares, setVestibulares] = useState<string[]>([]);
