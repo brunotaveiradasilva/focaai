@@ -56,11 +56,11 @@ de staging → mergeia → gera `--profile production`.
 npx eas-cli@latest build --profile staging --platform android
 ```
 
-**API de staging (Railway):** no projeto do Railway, crie um ambiente `staging` (seletor de
-ambiente no topo → **New Environment**, duplicando `production`). Ele ganha cópias da API e do
-PostgreSQL, com banco vazio e domínio próprio. Nas variáveis do ambiente `staging`, troque o
-`JWT_SECRET` por outro valor e, se quiser que staging acompanhe uma branch (ex.: `develop`), mude
-a branch em **Settings → Source** do serviço da API nesse ambiente.
+**API de staging (Railway):** o projeto do Railway tem os ambientes `production` e `staging`, cada
+um com sua API e seu PostgreSQL. O `staging` (`https://focaai-api-staging.up.railway.app`) faz
+deploy da branch `develop` da API, e o `production`, da `main`. Mudança na API: PR para `develop` →
+testa no staging → PR de `develop` para `main` → produção. O `JWT_SECRET` é diferente em cada
+ambiente, então a sessão de um não vale no outro.
 
 **Google:** os clients OAuth de Android e iOS são presos ao id do app, então o app de staging
 precisa dos seus: no Google Cloud Console, crie um client Android para `com.focaai.app.staging`
