@@ -49,12 +49,21 @@ Cadastre `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` e
 `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` em `preview` (staging) e em `production`, cada um com os
 valores do seu ambiente.
 
-Fluxo de uma mudança: abre o PR → gera `--profile staging` e testa no app de staging, contra a API
-de staging → mergeia → gera `--profile production`.
+**Branches:** igual à API, a `develop` recebe as mudanças e a `main` é o que está (ou vai agora)
+para a produção. Mergear na `develop` não publica nada; você escolhe quando uma versão sai.
+
+1. Mudança: PR para a `develop` → gera `--profile staging` a partir da branch do PR e testa no app
+   de staging, contra a API de staging → mergeia na `develop`.
+2. Versão: quando quiser publicar, gera `--profile staging` a partir da `develop` e testa o conjunto
+   → PR de `develop` para `main` → mergeia → gera `--profile production` a partir da `main`.
 
 ```bash
 npx eas-cli@latest build --profile staging --platform android
+npx eas-cli@latest build --profile production --platform android
 ```
+
+O app não tem atualização pelo ar (`expo-updates`): nada chega a quem já tem o app sem um build novo
+de produção.
 
 **API de staging (Railway):** o projeto do Railway tem os ambientes `production` e `staging`, cada
 um com sua API e seu PostgreSQL. O `staging` (`https://focaai-api-staging.up.railway.app`) faz
