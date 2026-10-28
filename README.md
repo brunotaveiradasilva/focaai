@@ -23,6 +23,52 @@ Na web (`npx expo start --web`) o login usa o Google Identity Services e funcion
 Fotos de perfil e dos posts usam `expo-image-picker` e `expo-image-manipulator`, que também têm
 código nativo: depois de atualizar, gere um development build novo.
 
+## Ambientes (dev, staging e produção)
+
+Cada ambiente é um app separado, com API e banco próprios, para testar mudança sem encostar em
+quem usa o app de verdade:
+
+| Perfil do EAS | App (`APP_VARIANT`) | Id Android/iOS | Variáveis do EAS | API |
+|---|---|---|---|---|
+| `development` | FocaAI (Dev) | `com.focaai.app.dev` | `development` | local (`.env`) |
+| `staging` | FocaAI (Staging) | `com.focaai.app.staging` | `preview` | API de staging no Railway |
+| `production` | FocaAI | `com.focaai.app` | `production` | API de produção no Railway |
+
+Como os ids são diferentes, os três ficam instalados lado a lado no mesmo celular. O nome, o id e o
+scheme de cada um estão no `app.config.ts`; o perfil do `eas.json` escolhe a variante e de qual
+ambiente do EAS vêm as variáveis.
+
+As variáveis `EXPO_PUBLIC_` de cada ambiente ficam no EAS (expo.dev → projeto → Environment
+variables, ou pela CLI):
+
+```bash
+npx eas-cli@latest env:set --name EXPO_PUBLIC_API_URL --value https://focaai-api-staging.up.railway.app --environment preview --visibility plaintext
+```
+
+Cadastre `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` e
+`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` em `preview` (staging) e em `production`, cada um com os
+valores do seu ambiente.
+
+Fluxo de uma mudança: abre o PR → gera `--profile staging` e testa no app de staging, contra a API
+de staging → mergeia → gera `--profile production`.
+
+```bash
+npx eas-cli@latest build --profile staging --platform android
+```
+
+**API de staging (Railway):** no projeto do Railway, crie um ambiente `staging` (seletor de
+ambiente no topo → **New Environment**, duplicando `production`). Ele ganha cópias da API e do
+PostgreSQL, com banco vazio e domínio próprio. Nas variáveis do ambiente `staging`, troque o
+`JWT_SECRET` por outro valor e, se quiser que staging acompanhe uma branch (ex.: `develop`), mude
+a branch em **Settings → Source** do serviço da API nesse ambiente.
+
+**Google:** os clients OAuth de Android e iOS são presos ao id do app, então o app de staging
+precisa dos seus: no Google Cloud Console, crie um client Android para `com.focaai.app.staging`
+(com o SHA-1 da keystore de staging, que o EAS mostra em `npx eas-cli@latest credentials`) e um
+client iOS para o mesmo bundle id. Coloque esses client IDs no `GOOGLE_CLIENT_IDS` da API de
+staging, e o client iOS de staging no `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` do ambiente `preview` do
+EAS. O client web pode ser o mesmo nos dois.
+
 ## Dados
 
 O app não calcula nem guarda o estudo sozinho: perfil, plano da semana, roadmap, check-ins,
