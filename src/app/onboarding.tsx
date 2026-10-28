@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { RoutineEditor } from '@/components/routine-editor';
+import { DayTimes, WeekActivities } from '@/components/routine-editor';
 import { IconName, SUBJECT_ICON } from '@/components/subject-style';
 import { Button, Card, Dots, Kicker, Pill, PillRow, PressableScale, Screen, Sub, Title } from '@/components/ui';
 import {
@@ -15,7 +15,6 @@ import {
   SUBJECTS,
   SubjectId,
   TIERS,
-  Tier,
   VESTIBULARES,
   courseById,
   subjectById,
@@ -28,7 +27,7 @@ import type { ExamDate, Level, Obstacle, PlanPreview, Profile, Stage } from '@/l
 import { enterStep } from '@/theme/motion';
 import { colors, fonts } from '@/theme/tokens';
 
-const TOTAL = 8;
+const TOTAL = 9;
 
 // Study periods aren't asked in the onboarding: weekday nights and the weekend. Rows are
 // morning, afternoon and night, Monday to Sunday.
@@ -67,7 +66,25 @@ const OBSTACLES: { id: Obstacle; label: string; icon: IconName }[] = [
   { id: 'ansiedade', label: 'Ansiedade com a prova', icon: 'pulse-outline' },
 ];
 
-const TIER_ORDER: Tier[] = ['muito-alta', 'alta', 'media', 'moderada'];
+// Catch-all options: they aren't in any vestibular's course list, and that's expected.
+const GENERIC_COURSES = ['outro', 'engenharias'];
+
+/** Lowercase and without accents, so "musica" finds "Música". */
+const fold = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[áàâãä]/g, 'a')
+    .replace(/[éèêë]/g, 'e')
+    .replace(/[íìîï]/g, 'i')
+    .replace(/[óòôõö]/g, 'o')
+    .replace(/[úùûü]/g, 'u')
+    .replace(/ç/g, 'c');
+
+/** The chosen vestibulares whose 2027 course list doesn't have this course. */
+function missingIn(courseId: string, vestibulares: string[]) {
+  if (GENERIC_COURSES.includes(courseId)) return [];
+  return VESTIBULARES.filter((v) => vestibulares.includes(v.id) && v.courses && !v.courses.includes(courseId)).map((v) => v.name);
+}
 
 /** The default periods, unless the fixed week leaves none of them free: then every period it leaves free. */
 function studyWeek(preview: PlanPreview | undefined) {
@@ -155,7 +172,7 @@ export default function Onboarding() {
           <>
             <Kicker>Vamos montar sua preparação</Kicker>
             <Title>Como podemos te chamar?</Title>
-            <Sub>São 8 perguntas rápidas. Quanto mais sincero, mais o plano fica com a sua cara.</Sub>
+            <Sub>São 9 perguntas rápidas. Quanto mais sincero, mais o plano fica com a sua cara.</Sub>
             <TextInput
               value={name}
               onChangeText={setName}
@@ -213,25 +230,21 @@ export default function Onboarding() {
             <Kicker>{step + 1} de {TOTAL} · Curso</Kicker>
             <Title>Qual curso você quer?</Title>
             <Sub>Não precisa escolher faculdade. A concorrência do curso é o que define a intensidade do seu plano.</Sub>
-            {TIER_ORDER.map((tier) => (
-              <View key={tier} style={{ marginBottom: 12 }}>
-                <Text style={styles.tierHead}>Concorrência {TIERS[tier].label.toLowerCase()}</Text>
-                <PillRow>
-                  {COURSES.filter((c) => c.tier === tier).map((c) => (
-                    <Pill key={c.id} label={c.name} selected={courseId === c.id} onPress={() => setCourseId(c.id)} />
-                  ))}
-                </PillRow>
-              </View>
-            ))}
             {courseId ? (
-              <Card style={{ borderColor: colors.accentDim }}>
+              <Card style={{ borderColor: colors.accentDim, marginBottom: 12 }}>
                 <Text style={styles.cardTitle}>
                   {courseById(courseId).name} · concorrência {TIERS[courseById(courseId).tier].label.toLowerCase()}
                 </Text>
                 <Text style={styles.cardText}>{TIERS[courseById(courseId).tier].desc}</Text>
+                {missingIn(courseId, draft.vestibulares).length ? (
+                  <Text style={[styles.hint, { marginTop: 6, color: colors.gold }]}>
+                    Não aparece na lista de cursos de {missingIn(courseId, draft.vestibulares).join(', ')}.
+                  </Text>
+                ) : null}
                 <Text style={[styles.hint, { marginTop: 6 }]}>Faixa aproximada, com base em como as notas de corte do SISU costumam ordenar os cursos.</Text>
               </Card>
             ) : null}
+            <CoursePicker value={courseId} onChange={setCourseId} vestibulares={draft.vestibulares} />
           </>
         )}
 
@@ -294,17 +307,26 @@ export default function Onboarding() {
 
         {step === 5 && (
           <>
+            <Kicker>{step + 1} de {TOTAL} · Rotina</Kicker>
+            <Title>Como é o seu dia?</Title>
+            <Sub>Digite os horários ou toque numa sugestão. O plano não marca estudo fora desse intervalo nem no almoço.</Sub>
+            <DayTimes value={routine} onChange={setRoutine} suggestions />
+          </>
+        )}
+
+        {step === 6 && (
+          <>
             <Kicker>{step + 1} de {TOTAL} · Semana</Kicker>
             <Title>Conte como é a sua semana</Title>
             <Sub>
               Cadastre escola, trabalho, inglês, esporte, hobbies e tudo que se repete. Assim o plano encaixa o estudo no tempo
               que sobra. Dá para mudar depois em Ajustes.
             </Sub>
-            <RoutineEditor value={routine} onChange={setRoutine} free={preview?.free} />
+            <WeekActivities value={routine} onChange={setRoutine} free={preview?.free} />
           </>
         )}
 
-        {step === 6 && (
+        {step === 7 && (
           <>
             <Kicker>{step + 1} de {TOTAL} · Disciplina</Kicker>
             <Title>O que mais te atrapalha?</Title>
@@ -323,7 +345,7 @@ export default function Onboarding() {
           </>
         )}
 
-        {step === 7 && <PlanSummary profile={draft} preview={preview} />}
+        {step === 8 && <PlanSummary profile={draft} preview={preview} />}
         {saveError ? <Text style={[styles.hint, { color: colors.danger, marginTop: 10 }]}>{saveError}</Text> : null}
       </Animated.View>
     </Screen>
@@ -347,6 +369,66 @@ function OptionCard({ icon, title, desc, selected, onPress }: { icon: IconName; 
       </View>
       <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? colors.accent : colors.line} />
     </PressableScale>
+  );
+}
+
+// Every course in one list, filtered by name as the student types. Each row says which of the
+// chosen vestibulares offer it.
+function CoursePicker({ value, onChange, vestibulares }: { value: string | null; onChange: (id: string) => void; vestibulares: string[] }) {
+  const [query, setQuery] = useState('');
+  const q = fold(query.trim());
+  const found = q ? COURSES.filter((c) => fold(c.name).includes(q)) : COURSES;
+  // "Outro curso / ainda não sei" is always there, so a search never leaves the student stuck.
+  const other = COURSES[COURSES.length - 1];
+  const list = found.includes(other) ? found : [...found, other];
+  const chosen = VESTIBULARES.filter((v) => vestibulares.includes(v.id) && v.courses);
+
+  return (
+    <>
+      <View style={styles.search}>
+        <Ionicons name="search" size={18} color={colors.muted} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Digite o nome do curso"
+          placeholderTextColor={colors.muted}
+          style={styles.searchInput}
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {query ? (
+          <Pressable onPress={() => setQuery('')} accessibilityLabel="Limpar busca" hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={colors.muted} />
+          </Pressable>
+        ) : null}
+      </View>
+      {q && found.length === 0 ? (
+        <Text style={[styles.hint, { marginBottom: 8 }]}>Nenhum curso com esse nome. Escolha o mais parecido ou “Outro curso”.</Text>
+      ) : null}
+      <View style={styles.courseList}>
+        {list.map((c, i) => {
+          const on = value === c.id;
+          const offeredBy = chosen.filter((v) => v.courses!.includes(c.id)).map((v) => v.name);
+          return (
+            <Pressable
+              key={c.id}
+              onPress={() => onChange(c.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              style={[styles.courseRow, i > 0 && styles.courseDivider, on && styles.courseRowOn]}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.courseName, on && { color: colors.accent }]}>{c.name}</Text>
+                <Text style={styles.hint}>
+                  Concorrência {TIERS[c.tier].label.toLowerCase()}
+                  {offeredBy.length ? ` · ${offeredBy.join(', ')}` : ''}
+                </Text>
+              </View>
+              <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? colors.accent : colors.line} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
   );
 }
 
@@ -477,7 +559,23 @@ const styles = StyleSheet.create({
   },
   label: { color: colors.text, fontFamily: fonts.semibold, fontSize: 13, marginBottom: 8 },
   hint: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, lineHeight: 17 },
-  tierHead: { color: colors.muted, fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  searchInput: { flex: 1, paddingVertical: 12, color: colors.text, fontFamily: fonts.body, fontSize: 16 },
+  courseList: { borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface2, overflow: 'hidden' },
+  courseRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 14 },
+  courseDivider: { borderTopWidth: 1, borderTopColor: colors.line },
+  courseRowOn: { backgroundColor: colors.accentSoft },
+  courseName: { color: colors.text, fontFamily: fonts.medium, fontSize: 14 },
   cardTitle: { color: colors.text, fontFamily: fonts.semibold, fontSize: 14 },
   cardText: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, lineHeight: 19, marginTop: 4 },
   option: {

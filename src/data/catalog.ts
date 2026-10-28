@@ -15,6 +15,8 @@ export type Subject = { id: SubjectId; name: string; short: string; color: strin
 export type AreaInfo = { id: Area; name: string; short: string; subjects: SubjectId[] };
 export type Course = { id: string; name: string; tier: Tier; focus: SubjectId[] };
 export type TierInfo = { label: string; desc: string; simuladosPerMonth: number; redacoesPerWeek: number; questionShare: number };
+// A vestibular and the courses (Course ids) it offers; copies saved before the list existed have none.
+export type Vestibular = { id: string; name: string; courses?: string[] };
 export type ExamPhase = { label: string; dates: string[] };
 export type ExamEvent = {
   id: string;
@@ -52,7 +54,7 @@ type Content = {
   courses: Course[];
   tiers: Record<Tier, TierInfo>;
   exams: ExamEvent[];
-  vestibulares: { id: string; name: string }[];
+  vestibulares: Vestibular[];
   cycles: number[];
   trackLabels: Record<ExamTrack, string>;
   topics: Topic[];
@@ -63,7 +65,7 @@ export const AREAS: AreaInfo[] = [];
 export const COURSES: Course[] = [];
 export const TIERS = {} as Record<Tier, TierInfo>;
 export const EXAM_CALENDAR: ExamEvent[] = [];
-export const VESTIBULARES: { id: string; name: string }[] = [];
+export const VESTIBULARES: Vestibular[] = [];
 export const CYCLES: number[] = [];
 export const TRACK_LABEL = {} as Record<ExamTrack, string>;
 export const TOPICS: Topic[] = [];
