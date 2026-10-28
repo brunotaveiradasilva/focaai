@@ -7,6 +7,14 @@
       "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
       "port": 8082,
       "autoPort": true
+    },
+    {
+      "name": "expo-web-api-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start", "--web", "--port", "8083"],
+      "env": { "EXPO_PUBLIC_API_URL": "http://localhost:8080" },
+      "port": 8083,
+      "autoPort": true
     }
   ]
 }
